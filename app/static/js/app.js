@@ -15,7 +15,15 @@ let pttMode = false;
 let audioInitialized = false;
 
 const SIMUL_KEY = "live-translator.simul";
+const CONVO_KEY = "live-translator.convo";
 let simulMode = localStorage.getItem(SIMUL_KEY) === "true";
+// Conversation = bidirectional interpreter between the two chosen languages.
+// Mutually exclusive with Simul; if both were persisted, Simul wins.
+let convoMode = localStorage.getItem(CONVO_KEY) === "true";
+if (simulMode && convoMode) {
+  convoMode = false;
+  localStorage.setItem(CONVO_KEY, "false");
+}
 
 const sourceLangSelect = document.getElementById("sourceLang");
 const targetLangSelect = document.getElementById("targetLang");
@@ -178,6 +186,7 @@ function getWebSocketUrl() {
   const target = targetLangSelect.value;
   let url = wsProtocol + "//" + window.location.host + "/ws/" + userId + "/" + sessionId + "?source=" + source + "&target=" + target;
   if (simulMode) url += "&simul=true";
+  if (convoMode) url += "&convo=true";
   return url;
 }
 
@@ -484,7 +493,9 @@ function reconnectWithNewLanguage() {
   messagesDiv.innerHTML = '';
   const srcName = document.getElementById("sourceLangTrigger").textContent;
   const tgtName = document.getElementById("targetLangTrigger").textContent;
-  addSystemMessage(`${srcName} → ${tgtName}${simulMode ? " (Simultaneous)" : ""}`);
+  const sep = convoMode ? " ⇄ " : " → ";
+  const modeLabel = simulMode ? " (Simultaneous)" : convoMode ? " (Conversation)" : "";
+  addSystemMessage(`${srcName}${sep}${tgtName}${modeLabel}`);
   connectWebsocket();
 }
 
@@ -536,11 +547,28 @@ function startAudio() {
   });
 }
 
+// iOS drops audio contexts to "suspended"/"interrupted" on interruptions (and
+// sometimes right after creation). Resume both on any user gesture / when the
+// tab becomes visible again, so mic capture and playback keep working.
+function resumeAudioContexts() {
+  for (const ctx of [audioRecorderContext, audioPlayerContext]) {
+    if (ctx && ctx.state === "suspended") ctx.resume().catch(() => {});
+  }
+}
+["touchend", "mousedown", "keydown"].forEach((ev) =>
+  document.addEventListener(ev, resumeAudioContexts, { passive: true })
+);
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) resumeAudioContexts();
+});
+
 const startAudioButton = document.getElementById("startAudioButton");
 const pttToggle = document.getElementById("pttToggle");
 const simulToggle = document.getElementById("simulToggle");
+const convoToggle = document.getElementById("convoToggle");
 
 simulToggle.checked = simulMode;
+convoToggle.checked = convoMode;
 
 function applySimulUi() {
   const glossaryBtn = document.getElementById("openGlossary");
@@ -566,8 +594,28 @@ applySimulUi();
 simulToggle.addEventListener("change", () => {
   simulMode = simulToggle.checked;
   localStorage.setItem(SIMUL_KEY, simulMode ? "true" : "false");
+  if (simulMode && convoMode) {
+    // Simul and Conversation are mutually exclusive.
+    convoMode = false;
+    convoToggle.checked = false;
+    localStorage.setItem(CONVO_KEY, "false");
+  }
   rebuildTargetDropdown();
   applySimulUi();
+  reconnectWithNewLanguage();
+});
+
+convoToggle.addEventListener("change", () => {
+  convoMode = convoToggle.checked;
+  localStorage.setItem(CONVO_KEY, convoMode ? "true" : "false");
+  if (convoMode && simulMode) {
+    // Turning on Conversation cancels Simul; restore the two-way language UI.
+    simulMode = false;
+    simulToggle.checked = false;
+    localStorage.setItem(SIMUL_KEY, "false");
+    rebuildTargetDropdown();
+    applySimulUi();
+  }
   reconnectWithNewLanguage();
 });
 

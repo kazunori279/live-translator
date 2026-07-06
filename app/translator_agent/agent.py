@@ -270,3 +270,47 @@ def build_system_instruction(
         f"produce exactly one translation of that segment and nothing else."
         + _glossary_section(entries)
     )
+
+
+def _glossary_section_bidi(entries: list[GlossaryEntry]) -> str:
+    if not entries:
+        return ""
+    lines = "\n".join(f"- {src} ↔ {tgt}" for src, tgt, _ in entries)
+    return (
+        "\n\nUse the following glossary for specific terms, in either direction. "
+        "Match each term case-insensitively; whenever you hear one side of a pair, "
+        "always render it as the other side in your translation:\n" + lines
+    )
+
+
+def build_conversation_instruction(
+    lang_a: str = "en",
+    lang_b: str = "ja",
+    glossary_entries: list[GlossaryEntry] | None = None,
+) -> str:
+    """Build a bidirectional interpreter instruction for a two-person conversation.
+
+    Unlike the one-way translator, the model auto-detects which of the two
+    languages each utterance is in and speaks the translation in the *other*
+    language, so both speakers hear each other through the interpreter.
+    """
+    a = LANGUAGES.get(lang_a, lang_a)
+    b = LANGUAGES.get(lang_b, lang_b)
+    entries = (
+        glossary_entries if glossary_entries is not None else load_default_glossary()
+    )
+    return (
+        f"You are a real-time interpreter for a live, two-way conversation between "
+        f"a {a} speaker and a {b} speaker. For every utterance, first detect which "
+        f"of the two languages it is spoken in, then speak the translation in the "
+        f"OTHER language:\n"
+        f"- If the utterance is in {a}, translate it into {b}.\n"
+        f"- If the utterance is in {b}, translate it into {a}.\n"
+        f"Speak naturally as their interpreter, preserving the speaker's original "
+        f"tone and urgency. "
+        f"Translate only the current utterance. Do not repeat, reference, or prepend "
+        f"translations from previous turns. Each spoken segment should produce exactly "
+        f"one translation of that segment and nothing else. Never translate into the "
+        f"same language the utterance was spoken in, and never echo the original."
+        + _glossary_section_bidi(entries)
+    )

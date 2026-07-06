@@ -4,6 +4,11 @@
 
 export async function startAudioRecorderWorklet(audioRecorderHandler, deviceId) {
   const audioRecorderContext = new AudioContext({ sampleRate: 16000 });
+  // iOS Safari starts the context "suspended"; without resuming, the worklet
+  // never runs and no mic PCM is produced. Resume within the Start gesture.
+  if (audioRecorderContext.state === "suspended") {
+    await audioRecorderContext.resume();
+  }
   const workletURL = new URL("./pcm-recorder-processor.js", import.meta.url);
   await audioRecorderContext.audioWorklet.addModule(workletURL);
 

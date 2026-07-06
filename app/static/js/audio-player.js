@@ -4,6 +4,10 @@
 
 export async function startAudioPlayerWorklet(sinkId) {
   const audioContext = new AudioContext({ sampleRate: 24000 });
+  // iOS Safari starts the context "suspended"; resume so playback is audible.
+  if (audioContext.state === "suspended") {
+    await audioContext.resume();
+  }
   if (sinkId && audioContext.setSinkId) {
     await audioContext.setSinkId(sinkId);
   }

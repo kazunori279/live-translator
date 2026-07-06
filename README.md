@@ -1,6 +1,6 @@
 # Live Translator
 
-Real-time audio translation powered by Gemini Live API. Speak in any language and hear the translation immediately. Two modes: agent mode (97 languages, glossary, voice replication) and simultaneous translation mode (78 languages, auto-detect source language).
+Real-time audio translation powered by Gemini Live API. Speak in any language and hear the translation immediately. Three modes: agent mode (97 languages, glossary, voice replication), simultaneous translation mode (78 languages, auto-detect source language), and conversation mode (a bidirectional interpreter between two languages, so two people can talk to each other).
 
 ![Demo](demo.gif)
 
@@ -52,6 +52,16 @@ Differences from agent mode:
 - **Idle timer**: since the model doesn't send turn-complete signals, transcription bubbles are finalized after 2 seconds of silence
 
 Language selections are preserved when switching modes — codes are mapped automatically between the two language sets (e.g. `zh` ↔ `zh-Hans`).
+
+### Conversation
+
+Toggle **Conversation** to turn the one-way translator into a **bidirectional interpreter** between the two selected languages, so two people can hold a live conversation. The model auto-detects which of the two languages each utterance is spoken in and speaks the translation in the *other* one — e.g. with English + Japanese selected, English speech is rendered in Japanese and Japanese speech in English, in the same session.
+
+Details:
+- Both language selectors stay visible (unlike Simul); pick the two conversation languages.
+- Uses the agent model (`gemini-3.1-flash-live-preview`) with a bidirectional interpreter system instruction. The **glossary applies in either direction**.
+- A single output voice speaks both directions (the Live session has one voice config).
+- **Mutually exclusive with Simul** — turning one on turns the other off.
 
 ### Push to Talk
 
@@ -155,6 +165,8 @@ FastAPI bridges one browser WebSocket to a series of Gemini Live API sessions. T
 **Agent mode** uses `gemini-3.1-flash-live-preview` via the Gemini API (`generativelanguage.googleapis.com`). The system instruction (built in `app/translator_agent/agent.py`) tells the model to translate only the current utterance and never repeat previous translations. The glossary is embedded as `source → target` pairs with case-insensitive matching.
 
 **Simultaneous translation mode** uses `gemini-3.5-live-translate-preview` with a `TranslationConfig` instead of system instructions. The config specifies `target_language_code` and `echo_target_language=True` (so the model echoes back what it hears in the target language). This model auto-detects the source language and does not support tools, glossary, or voice replication.
+
+**Conversation mode** reuses the agent model (`gemini-3.1-flash-live-preview`) but with a bidirectional interpreter system instruction (`build_conversation_instruction` in `app/translator_agent/agent.py`): it tells the model to detect which of the two configured languages each utterance is in and reply in the other. The WebSocket carries a `convo=true` query param; the glossary is embedded bidirectionally (`source ↔ target`).
 
 Audio input is 16 kHz mono PCM; output is 24 kHz PCM (both modes).
 

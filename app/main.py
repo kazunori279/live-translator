@@ -37,6 +37,7 @@ from translator_agent import (  # noqa: E402
     SIMUL_MODEL,
     SIMUL_POPULAR_LANGUAGES,
     VR_MODEL,
+    build_conversation_instruction,
     build_system_instruction,
     load_default_glossary,
     simul_language_code,
@@ -234,11 +235,12 @@ async def websocket_endpoint(
     source: str = "en",
     target: str = "ja",
     simul: bool = False,
+    convo: bool = False,
 ) -> None:
     """WebSocket endpoint bridging browser audio to a Gemini Live session."""
     logger.info(
-        "WS request: source=%s, target=%s, simul=%s",
-        source, target, simul,
+        "WS request: source=%s, target=%s, simul=%s, convo=%s",
+        source, target, simul, convo,
     )
     await websocket.accept()
 
@@ -279,7 +281,15 @@ async def websocket_endpoint(
             active_model, target, target_code,
         )
     else:
-        system_instruction = build_system_instruction(source, target, glossary_entries)
+        if convo:
+            system_instruction = build_conversation_instruction(
+                source, target, glossary_entries
+            )
+            logger.info("Conversation mode: %s <-> %s", source, target)
+        else:
+            system_instruction = build_system_instruction(
+                source, target, glossary_entries
+            )
         target_code = None
         active_model = VR_MODEL if vr_enabled else MODEL
         if vr_enabled:
