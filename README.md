@@ -101,7 +101,10 @@ Overlay translated subtitles on top of any window — useful for presentations a
 2. Click **Caption** in the header — a new window opens with a "Select Window" button
 3. Click **Select Window** and pick the window to mirror (e.g. your slides, Keynote, or any app)
 4. The selected window's content streams into the caption page with translated subtitles at the bottom
-5. Share this caption window on Google Meet — participants see your slides with live subtitles
+5. Click the **⛶ Fullscreen** button in the top-right (or press **F** / double-click) to fill the screen
+6. Share this caption window on Google Meet — participants see your slides with live subtitles
+
+Fullscreen needs its own click, separate from *Select Window*: `requestFullscreen()` consumes the transient user activation that `getDisplayMedia()` also requires, and the window picker preempts an in-flight fullscreen transition. Hence the dedicated button, which appears once mirroring starts and fades out after 4 seconds so it stays off your slides — move the mouse to bring it back. **Esc** exits, as does stopping the screen share.
 
 The caption page uses the [Screen Capture API](https://developer.mozilla.org/en-US/docs/Web/API/Screen_Capture_API) to mirror the target window and the [BroadcastChannel API](https://developer.mozilla.org/en-US/docs/Web/API/BroadcastChannel) to receive transcription from the main page, so both pages must run in the same browser. No OBS or third-party tools needed.
 

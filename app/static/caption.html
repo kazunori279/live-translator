@@ -17,12 +17,23 @@
     }
     #prompt h2 { font-size: 1.4rem; font-weight: 500; }
     #prompt p { font-size: 0.95rem; color: #aaa; max-width: 28rem; text-align: center; line-height: 1.5; }
+    #prompt .hint { font-size: 0.8rem; color: #777; }
     #prompt button {
       padding: 0.7rem 2rem; font-size: 1rem; border: none; border-radius: 0.5rem;
       background: #4285f4; color: #fff; cursor: pointer;
     }
     #prompt button:hover { background: #3367d6; }
     #prompt.hidden { display: none; }
+
+    #fsBtn {
+      position: fixed; top: 1rem; right: 1rem; z-index: 30;
+      padding: 0.6rem 1.1rem; font-size: 0.95rem; border: none; border-radius: 0.4rem;
+      background: rgba(0, 0, 0, 0.65); color: #fff; cursor: pointer;
+      transition: opacity 0.4s ease;
+    }
+    #fsBtn:hover { background: rgba(0, 0, 0, 0.9); }
+    #fsBtn.hidden { display: none; }
+    #fsBtn.faded { opacity: 0; pointer-events: none; }
 
     #lines {
       position: fixed; bottom: 2rem; left: 2rem; right: 2rem;
@@ -58,7 +69,10 @@
     <h2>Caption Overlay</h2>
     <p>Select a window to mirror. Translated subtitles will appear at the bottom. Share this window on Google Meet.</p>
     <button id="startCapture">Select Window</button>
+    <p class="hint">Once mirroring starts, click <b>Fullscreen</b> (or press <b>F</b> / double-click) — <b>Esc</b> exits.</p>
   </div>
+
+  <button id="fsBtn" class="hidden" title="Fullscreen (F)">⛶ Fullscreen</button>
 
   <div id="lines"></div>
 
@@ -73,6 +87,58 @@
     let currentLine = null;
     let currentText = "";
 
+    /**
+     * Fullscreen.
+     *
+     * This deliberately does NOT piggyback on the "Select Window" click:
+     * requestFullscreen() consumes the transient user activation that
+     * getDisplayMedia() also requires, and Chrome's window picker preempts an
+     * in-flight fullscreen transition anyway. So the two need separate
+     * gestures — hence the floating Fullscreen button shown once mirroring
+     * starts (plus the F key and double-click).
+     */
+    const fsBtn = document.getElementById("fsBtn");
+    let fsFadeTimer = null;
+
+    function enterFullscreen() {
+      if (document.fullscreenElement) return Promise.resolve();
+      const el = document.documentElement;
+      const req = el.requestFullscreen || el.webkitRequestFullscreen;
+      if (!req) return Promise.resolve();
+      return Promise.resolve(req.call(el, { navigationUI: "hide" })).catch(() => {});
+    }
+
+    function exitFullscreen() {
+      if (!document.fullscreenElement) return Promise.resolve();
+      const fn = document.exitFullscreen || document.webkitExitFullscreen;
+      if (!fn) return Promise.resolve();
+      return Promise.resolve(fn.call(document)).catch(() => {});
+    }
+
+    function toggleFullscreen() {
+      return document.fullscreenElement ? exitFullscreen() : enterFullscreen();
+    }
+
+    /** Show the Fullscreen button, then fade it out so it stays off the slides. */
+    function showFsBtn() {
+      if (!video.srcObject || document.fullscreenElement) return;
+      fsBtn.classList.remove("hidden", "faded");
+      clearTimeout(fsFadeTimer);
+      fsFadeTimer = setTimeout(() => fsBtn.classList.add("faded"), 4000);
+    }
+
+    function hideFsBtn() {
+      clearTimeout(fsFadeTimer);
+      fsBtn.classList.add("hidden");
+    }
+
+    fsBtn.addEventListener("click", () => enterFullscreen());
+    document.addEventListener("mousemove", showFsBtn);
+    document.addEventListener("fullscreenchange", () => {
+      if (document.fullscreenElement) hideFsBtn();
+      else showFsBtn();
+    });
+
     document.getElementById("startCapture").addEventListener("click", async () => {
       try {
         const stream = await navigator.mediaDevices.getDisplayMedia({
@@ -82,14 +148,23 @@
         });
         video.srcObject = stream;
         prompt.classList.add("hidden");
+        showFsBtn();
         stream.getVideoTracks()[0].addEventListener("ended", () => {
           video.srcObject = null;
           prompt.classList.remove("hidden");
+          hideFsBtn();
+          exitFullscreen();
         });
       } catch {
         // User cancelled the picker
       }
     });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "f" || e.key === "F") toggleFullscreen();
+    });
+
+    document.addEventListener("dblclick", () => toggleFullscreen());
 
     function addLine(text, partial) {
       const div = document.createElement("div");

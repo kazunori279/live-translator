@@ -522,28 +522,64 @@ let micStream;
 import { startAudioPlayerWorklet } from "./audio-player.js";
 import { startAudioRecorderWorklet } from "./audio-recorder.js";
 
+// Hard ceiling on how long the "Starting audio" overlay may stay up. Mic
+// startup can hang rather than reject (a suspended AudioContext in an occluded
+// window, a wedged device), and a stuck overlay blocks the whole UI — so it
+// always comes down, with an error the user can act on.
+const AUDIO_START_WATCHDOG_MS = 15000;
+const AUDIO_WARMUP_MS = 3000;
+
 function startAudio() {
   const inputId = getSavedInputDevice();
   const outputId = getSavedOutputDevice();
+  const loadingOverlay = document.getElementById("loadingOverlay");
+  loadingOverlay.classList.remove("hidden");
+
+  let settled = false;
+
+  function finishAudioStart(errMsg) {
+    if (settled) return;
+    settled = true;
+    clearTimeout(watchdog);
+    loadingOverlay.classList.add("hidden");
+    if (errMsg) {
+      // Leave the app usable and let Start be clicked again.
+      audioInitialized = false;
+      is_audio = false;
+      startAudioButton.disabled = false;
+      addSystemMessage(`Could not start audio: ${errMsg}`);
+      return;
+    }
+    const { src, tgt } = getLanguageNames();
+    addSystemMessage(`Ready for ${src} to ${tgt} translation`);
+    if (pttMode) {
+      startAudioButton.disabled = false;
+      is_audio = false;
+    }
+  }
+
+  const watchdog = setTimeout(
+    () => finishAudioStart("timed out starting the microphone. Click Start to retry."),
+    AUDIO_START_WATCHDOG_MS
+  );
+
   startAudioPlayerWorklet(outputId).then(([node, ctx]) => {
     audioPlayerNode = node;
     audioPlayerContext = ctx;
+  }).catch((err) => {
+    // Playback is not fatal — transcripts still work without audio out.
+    console.error("Audio player failed to start:", err);
   });
-  const loadingOverlay = document.getElementById("loadingOverlay");
-  loadingOverlay.classList.remove("hidden");
+
   startAudioRecorderWorklet(audioRecorderHandler, inputId).then(([node, ctx, stream]) => {
     audioRecorderNode = node;
     audioRecorderContext = ctx;
     micStream = stream;
-    setTimeout(() => {
-      loadingOverlay.classList.add("hidden");
-      const { src, tgt } = getLanguageNames();
-      addSystemMessage(`Ready for ${src} to ${tgt} translation`);
-      if (pttMode) {
-        startAudioButton.disabled = false;
-        is_audio = false;
-      }
-    }, 3000);
+    clearTimeout(watchdog);
+    setTimeout(() => finishAudioStart(null), AUDIO_WARMUP_MS);
+  }).catch((err) => {
+    console.error("Audio recorder failed to start:", err);
+    finishAudioStart(err && err.name ? `${err.name} — ${err.message}` : String(err));
   });
 }
 
