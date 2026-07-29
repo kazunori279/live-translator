@@ -2,26 +2,41 @@
  * Audio Recorder Worklet
  */
 
+import { candidateIds, isPermissionError } from "./device-lookup.js";
+
 const RESUME_TIMEOUT_MS = 1500;
 
-/** getUserMedia, falling back to the default device if a saved one is gone. */
-async function getMicStream(deviceId) {
-  const base = { audio: { channelCount: 1 } };
-  if (!deviceId) return navigator.mediaDevices.getUserMedia(base);
-  try {
-    return await navigator.mediaDevices.getUserMedia({
-      audio: { channelCount: 1, deviceId: { exact: deviceId } },
-    });
-  } catch (err) {
-    // A saved device can vanish (unplugged, or grabbed by another app), which
-    // makes `deviceId: {exact}` throw OverconstrainedError. Prefer a working
-    // default mic over failing startup outright.
-    console.warn("Saved mic unavailable, using default:", err.name, err.message);
-    return navigator.mediaDevices.getUserMedia(base);
-  }
+function micConstraints(deviceId) {
+  return { audio: { channelCount: 1, deviceId: { exact: deviceId } } };
 }
 
-export async function startAudioRecorderWorklet(audioRecorderHandler, deviceId) {
+/**
+ * Open the highest-ranked usable mic from *prefs* (best first), else the default.
+ *
+ * Each entry is tried by id then by label, in rank order, so a lower-ranked
+ * device is only reached once every better one has actually failed to open.
+ * A default mic beats failing startup outright, so an exhausted list still
+ * yields a stream — but a permission refusal aborts immediately, since every
+ * remaining attempt would fail the same way and the caller should say so.
+ */
+async function getMicStream(prefs) {
+  const base = { audio: { channelCount: 1 } };
+  if (!prefs || !prefs.length) return navigator.mediaDevices.getUserMedia(base);
+
+  for (const id of await candidateIds("audioinput", prefs)) {
+    try {
+      return await navigator.mediaDevices.getUserMedia(micConstraints(id));
+    } catch (err) {
+      if (isPermissionError(err)) throw err;
+      console.warn("Preferred mic unusable:", id, err.name, err.message);
+    }
+  }
+
+  console.warn("No preferred mic available, falling back to the default");
+  return navigator.mediaDevices.getUserMedia(base);
+}
+
+export async function startAudioRecorderWorklet(audioRecorderHandler, devicePrefs) {
   const audioRecorderContext = new AudioContext({ sampleRate: 16000 });
   // iOS Safari starts the context "suspended"; without resuming, the worklet
   // never runs and no mic PCM is produced. Resume within the Start gesture.
@@ -40,7 +55,7 @@ export async function startAudioRecorderWorklet(audioRecorderHandler, deviceId) 
   const workletURL = new URL("./pcm-recorder-processor.js", import.meta.url);
   await audioRecorderContext.audioWorklet.addModule(workletURL);
 
-  const micStream = await getMicStream(deviceId);
+  const micStream = await getMicStream(devicePrefs);
   const source = audioRecorderContext.createMediaStreamSource(micStream);
 
   const audioRecorderNode = new AudioWorkletNode(

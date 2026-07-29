@@ -516,6 +516,10 @@ let audioPlayerContext;
 let audioRecorderNode;
 let audioRecorderContext;
 let micStream;
+// Devices the running pipeline actually settled on, so a device-list change can
+// tell whether a better-ranked one has appeared. "" means the system default.
+let activeInputDeviceId = "";
+let activeOutputDeviceId = "";
 
 import { startAudioPlayerWorklet } from "./audio-player.js";
 import { startAudioRecorderWorklet } from "./audio-recorder.js";
@@ -528,8 +532,8 @@ const AUDIO_START_WATCHDOG_MS = 15000;
 const AUDIO_WARMUP_MS = 3000;
 
 function startAudio() {
-  const inputId = getSavedInputDevice();
-  const outputId = getSavedOutputDevice();
+  const inputPrefs = getPriority(AUDIO_INPUT_KEY);
+  const outputPrefs = getPriority(AUDIO_OUTPUT_KEY);
   const loadingOverlay = document.getElementById("loadingOverlay");
   loadingOverlay.classList.remove("hidden");
 
@@ -561,18 +565,21 @@ function startAudio() {
     AUDIO_START_WATCHDOG_MS
   );
 
-  startAudioPlayerWorklet(outputId).then(([node, ctx]) => {
+  startAudioPlayerWorklet(outputPrefs).then(([node, ctx, sinkId]) => {
     audioPlayerNode = node;
     audioPlayerContext = ctx;
+    activeOutputDeviceId = sinkId;
   }).catch((err) => {
     // Playback is not fatal — transcripts still work without audio out.
     console.error("Audio player failed to start:", err);
   });
 
-  startAudioRecorderWorklet(audioRecorderHandler, inputId).then(([node, ctx, stream]) => {
+  startAudioRecorderWorklet(audioRecorderHandler, inputPrefs).then(([node, ctx, stream]) => {
     audioRecorderNode = node;
     audioRecorderContext = ctx;
     micStream = stream;
+    activeInputDeviceId = inputDeviceIdOf(stream);
+    healInputPriority(stream);
     clearTimeout(watchdog);
     setTimeout(() => finishAudioStart(null), AUDIO_WARMUP_MS);
   }).catch((err) => {
@@ -979,24 +986,112 @@ document.getElementById("resetGlossary").addEventListener("click", async () => {
 });
 
 /**
- * Audio device selection (per browser, stored in localStorage)
+ * Audio device preferences (per browser, stored in localStorage)
+ *
+ * Each kind keeps a *ranked* list of devices the user has picked, most recent
+ * first. Whichever entry is highest-ranked among the devices currently attached
+ * wins — so plugging a favourite headset back in reclaims it automatically,
+ * and unplugging it drops to the next choice rather than to the system default.
+ *
+ * An entry records both the deviceId and the label. The id is the precise
+ * handle but a perishable one: the browser re-salts it whenever site
+ * permissions are cleared, and some devices return with a new id after a
+ * replug. The label survives that, so it is the fallback — and whenever a
+ * label rescues a lookup, the fresh id is written back over the stale one.
  */
-const AUDIO_INPUT_KEY = "live-translator.audio.inputDeviceId";
-const AUDIO_OUTPUT_KEY = "live-translator.audio.outputDeviceId";
+const AUDIO_INPUT_KEY = "live-translator.audio.inputPriority";
+const AUDIO_OUTPUT_KEY = "live-translator.audio.outputPriority";
+const MAX_PRIORITY_ENTRIES = 10;
 
-function getSavedInputDevice() {
-  return localStorage.getItem(AUDIO_INPUT_KEY) || "";
+// Superseded single-device keys, still read once to migrate existing browsers.
+const LEGACY_KEYS = {
+  [AUDIO_INPUT_KEY]: ["live-translator.audio.inputDeviceId", "live-translator.audio.inputLabel"],
+  [AUDIO_OUTPUT_KEY]: ["live-translator.audio.outputDeviceId", "live-translator.audio.outputLabel"],
+};
+
+/** The ranked list for one device kind, best first. Entries are {id, label}. */
+function getPriority(key) {
+  try {
+    const list = JSON.parse(localStorage.getItem(key) || "null");
+    if (Array.isArray(list)) {
+      return list.filter((e) => e && typeof e === "object" && (e.id || e.label));
+    }
+  } catch {
+    // Corrupt JSON is not worth surfacing — fall through and re-derive.
+  }
+  const [idKey, labelKey] = LEGACY_KEYS[key];
+  const id = localStorage.getItem(idKey) || "";
+  const label = localStorage.getItem(labelKey) || "";
+  return id || label ? [{ id, label }] : [];
 }
-function setSavedInputDevice(id) {
-  if (id) localStorage.setItem(AUDIO_INPUT_KEY, id);
-  else localStorage.removeItem(AUDIO_INPUT_KEY);
+
+function setPriority(key, list) {
+  if (list.length) {
+    localStorage.setItem(key, JSON.stringify(list.slice(0, MAX_PRIORITY_ENTRIES)));
+  } else {
+    localStorage.removeItem(key);
+  }
+  for (const k of LEGACY_KEYS[key]) localStorage.removeItem(k);
 }
-function getSavedOutputDevice() {
-  return localStorage.getItem(AUDIO_OUTPUT_KEY) || "";
+
+// Upgrade the old single-device keys once, at load, so there is exactly one
+// representation on disk from here on.
+for (const key of [AUDIO_INPUT_KEY, AUDIO_OUTPUT_KEY]) {
+  if (!localStorage.getItem(key) && LEGACY_KEYS[key].some((k) => localStorage.getItem(k))) {
+    setPriority(key, getPriority(key));
+  }
 }
-function setSavedOutputDevice(id) {
-  if (id) localStorage.setItem(AUDIO_OUTPUT_KEY, id);
-  else localStorage.removeItem(AUDIO_OUTPUT_KEY);
+
+/** Same physical device? Ids are authoritative; labels cover a re-salted id. */
+function sameDevice(a, b) {
+  if (a.id && b.id && a.id === b.id) return true;
+  return !!(a.label && a.label === b.label);
+}
+
+/** Move a device to the top of its ranked list. */
+function promoteDevice(key, entry) {
+  setPriority(key, [entry, ...getPriority(key).filter((e) => !sameDevice(e, entry))]);
+}
+
+/**
+ * The best currently-attached device for a kind, or null for "system default".
+ *
+ * Only usable once labels are visible; before microphone permission is granted
+ * `enumerateDevices()` returns blank labels and ids, so callers must be ready
+ * for a null here to mean "don't know yet" rather than "nothing matches".
+ */
+function pickPreferred(key, devices) {
+  const list = getPriority(key);
+  for (let i = 0; i < list.length; i++) {
+    const entry = list[i];
+    const byId = entry.id && devices.find((d) => d.deviceId === entry.id);
+    const match = byId || (entry.label && devices.find((d) => d.label === entry.label));
+    if (!match) continue;
+    if (!byId) {
+      // The label rescued a stale id — write the current one back in place,
+      // keeping the entry's rank.
+      list[i] = { id: match.deviceId, label: match.label || entry.label };
+      setPriority(key, list);
+    }
+    return match;
+  }
+  return null;
+}
+
+/** Repair the top-ranked entry's id from the stream we actually got. */
+function healInputPriority(stream) {
+  const track = stream && stream.getAudioTracks()[0];
+  const list = getPriority(AUDIO_INPUT_KEY);
+  if (!track || !list.length) return; // never pin an implicit default
+  const id = track.getSettings().deviceId;
+  if (!id) return;
+  const entry = { id, label: track.label || list[0].label || "" };
+  // Only rewrite the entry this stream corresponds to; a fallback to some
+  // lower-ranked device must not promote it over the user's real first choice.
+  const idx = list.findIndex((e) => sameDevice(e, entry));
+  if (idx === -1) return;
+  list[idx] = entry;
+  setPriority(AUDIO_INPUT_KEY, list);
 }
 
 const audioOverlay = document.getElementById("audioOverlay");
@@ -1026,59 +1121,89 @@ async function populateAudioDevices() {
     ? ""
     : "Grant microphone permission to see device names.";
 
-  const savedInput = getSavedInputDevice();
-  const savedOutput = getSavedOutputDevice();
+  fillDeviceSelect(audioInputSelect, inputs, "Microphone", AUDIO_INPUT_KEY);
+  fillDeviceSelect(audioOutputSelect, outputs, "Speaker", AUDIO_OUTPUT_KEY);
+}
 
-  audioInputSelect.innerHTML = "";
-  const defaultIn = document.createElement("option");
-  defaultIn.value = "";
-  defaultIn.textContent = "System Default";
-  audioInputSelect.appendChild(defaultIn);
-  for (const d of inputs) {
+/** Rebuild a device dropdown, selecting the best-ranked attached device. */
+function fillDeviceSelect(select, devices, noun, key) {
+  select.innerHTML = "";
+  const dflt = document.createElement("option");
+  dflt.value = "";
+  dflt.textContent = "System Default";
+  select.appendChild(dflt);
+
+  const preferred = pickPreferred(key, devices);
+  for (const d of devices) {
     const opt = document.createElement("option");
     opt.value = d.deviceId;
-    opt.textContent = d.label || `Microphone (${d.deviceId.slice(0, 8)}...)`;
-    if (d.deviceId === savedInput) opt.selected = true;
-    audioInputSelect.appendChild(opt);
-  }
-
-  audioOutputSelect.innerHTML = "";
-  const defaultOut = document.createElement("option");
-  defaultOut.value = "";
-  defaultOut.textContent = "System Default";
-  audioOutputSelect.appendChild(defaultOut);
-  for (const d of outputs) {
-    const opt = document.createElement("option");
-    opt.value = d.deviceId;
-    opt.textContent = d.label || `Speaker (${d.deviceId.slice(0, 8)}...)`;
-    if (d.deviceId === savedOutput) opt.selected = true;
-    audioOutputSelect.appendChild(opt);
+    opt.textContent = d.label || `${noun} (${d.deviceId.slice(0, 8)}...)`;
+    // The visible text falls back to a truncated id when labels are hidden;
+    // keep the real label separate so we never persist that placeholder.
+    opt.dataset.label = d.label || "";
+    if (d === preferred) opt.selected = true;
+    select.appendChild(opt);
   }
 }
 
+/** The label of the option currently chosen in a device dropdown. */
+function selectedLabel(select) {
+  const opt = select.selectedOptions[0];
+  return opt ? opt.dataset.label || "" : "";
+}
+
+/**
+ * Record an explicit pick. Choosing a real device ranks it first; choosing
+ * "System Default" is a deliberate opt-out, so it clears the list rather than
+ * being outranked by an earlier favourite the moment one gets plugged in.
+ */
+function onDevicePicked(key, select) {
+  if (select.value) promoteDevice(key, { id: select.value, label: selectedLabel(select) });
+  else setPriority(key, []);
+}
+
 audioInputSelect.addEventListener("change", () => {
-  setSavedInputDevice(audioInputSelect.value);
+  onDevicePicked(AUDIO_INPUT_KEY, audioInputSelect);
 });
 
 audioOutputSelect.addEventListener("change", () => {
-  setSavedOutputDevice(audioOutputSelect.value);
+  onDevicePicked(AUDIO_OUTPUT_KEY, audioOutputSelect);
 });
 
+/** deviceId the granted stream is really reading from ("" if unknown). */
+function inputDeviceIdOf(stream) {
+  const track = stream && stream.getAudioTracks()[0];
+  return (track && track.getSettings().deviceId) || "";
+}
+
+/** Rebuild the mic pipeline against the current preference ranking. */
+async function restartRecorder() {
+  if (!audioRecorderContext) return;
+  if (micStream) micStream.getTracks().forEach(t => t.stop());
+  await audioRecorderContext.close();
+  const [node, ctx, stream] = await startAudioRecorderWorklet(
+    audioRecorderHandler, getPriority(AUDIO_INPUT_KEY)
+  );
+  audioRecorderNode = node;
+  audioRecorderContext = ctx;
+  micStream = stream;
+  activeInputDeviceId = inputDeviceIdOf(stream);
+  healInputPriority(stream);
+}
+
+/** Rebuild the playback pipeline against the current preference ranking. */
+async function restartPlayer() {
+  if (!audioPlayerContext) return;
+  await audioPlayerContext.close();
+  const [node, ctx, sinkId] = await startAudioPlayerWorklet(getPriority(AUDIO_OUTPUT_KEY));
+  audioPlayerNode = node;
+  audioPlayerContext = ctx;
+  activeOutputDeviceId = sinkId;
+}
+
 document.getElementById("applyAudio").addEventListener("click", async () => {
-  if (audioRecorderContext) {
-    if (micStream) micStream.getTracks().forEach(t => t.stop());
-    await audioRecorderContext.close();
-    const [node, ctx, stream] = await startAudioRecorderWorklet(audioRecorderHandler, getSavedInputDevice());
-    audioRecorderNode = node;
-    audioRecorderContext = ctx;
-    micStream = stream;
-  }
-  if (audioPlayerContext) {
-    await audioPlayerContext.close();
-    const [node, ctx] = await startAudioPlayerWorklet(getSavedOutputDevice());
-    audioPlayerNode = node;
-    audioPlayerContext = ctx;
-  }
+  await restartRecorder();
+  await restartPlayer();
   audioOverlay.classList.add("hidden");
   // The voice is baked into the Live session's config, so a new choice only
   // applies once we reconnect.
@@ -1092,6 +1217,64 @@ document.getElementById("closeAudio").addEventListener("click", () => {
 audioOverlay.addEventListener("click", (e) => {
   if (e.target === audioOverlay) audioOverlay.classList.add("hidden");
 });
+
+/**
+ * Re-pick devices whenever the attached set changes.
+ *
+ * Plugging in a device the user ranks above the one in use switches to it, and
+ * losing the device in use drops to the next-best rather than to the system
+ * default. Nothing happens while audio is stopped — the next Start reads the
+ * same ranking anyway.
+ *
+ * Browsers fire `devicechange` several times for a single physical event (and
+ * once more after switching, since claiming a device perturbs the list), so
+ * the handler is debounced and re-entrancy is latched out.
+ */
+const DEVICE_CHANGE_DEBOUNCE_MS = 500;
+let deviceChangeTimer = null;
+let deviceSwitchInFlight = false;
+
+async function onDeviceChange() {
+  if (!audioOverlay.classList.contains("hidden")) populateAudioDevices();
+  if (deviceSwitchInFlight || (!audioRecorderContext && !audioPlayerContext)) return;
+
+  let devices;
+  try {
+    devices = await navigator.mediaDevices.enumerateDevices();
+  } catch {
+    return;
+  }
+  const preferredIn = pickPreferred(AUDIO_INPUT_KEY, devices.filter(d => d.kind === "audioinput"));
+  const preferredOut = pickPreferred(AUDIO_OUTPUT_KEY, devices.filter(d => d.kind === "audiooutput"));
+  // A null pick means no ranked device is attached; the pipeline is already on
+  // the system default in that case, so there is nothing to move to.
+  const swapIn = preferredIn && preferredIn.deviceId !== activeInputDeviceId;
+  const swapOut = preferredOut && preferredOut.deviceId !== activeOutputDeviceId;
+  if (!swapIn && !swapOut) return;
+
+  deviceSwitchInFlight = true;
+  try {
+    if (swapIn) {
+      await restartRecorder();
+      addSystemMessage(`Switched microphone to ${preferredIn.label || "preferred device"}`);
+    }
+    if (swapOut) {
+      await restartPlayer();
+      addSystemMessage(`Switched speaker to ${preferredOut.label || "preferred device"}`);
+    }
+  } catch (err) {
+    console.error("Failed to switch audio device:", err);
+  } finally {
+    deviceSwitchInFlight = false;
+  }
+}
+
+if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
+  navigator.mediaDevices.addEventListener("devicechange", () => {
+    clearTimeout(deviceChangeTimer);
+    deviceChangeTimer = setTimeout(onDeviceChange, DEVICE_CHANGE_DEBOUNCE_MS);
+  });
+}
 
 /**
  * Translation voice (per browser)

@@ -72,6 +72,10 @@ Click **Voice & Audio** in the header to pick the microphone, the speaker, and t
 
 The voice is part of the Live session's config, so switching it reconnects the session (the transcript is cleared). It applies to all three modes. Unknown voice names sent by a client are rejected server-side and fall back to the default (`Puck`), since the Live API refuses to connect on an unrecognised voice.
 
+Microphone and speaker choices build a **priority list** rather than a single setting. Each device you pick moves to the top of its list (up to 10 remembered), and the app always uses the highest-ranked device that is actually attached. Whenever the attached set changes — a headset plugged in, a dock removed — the list is re-evaluated and the pipeline switches to the new best device mid-session, so losing the mic in use drops to your next favourite instead of the system default. Choosing **System Default** is treated as a deliberate opt-out and clears the list.
+
+Each entry stores **both `deviceId` and label**. A `deviceId` is perishable — the browser re-salts it when site permissions are cleared, and some devices come back with a new one after a replug — so if the saved id no longer resolves, the device is matched by name and the stored id is repaired in place, keeping its rank. Entries for absent devices are kept, so plugging one back in reclaims its position.
+
 ### Glossary
 
 Click **Glossary** in the header to pin specific terms to fixed translations. The glossary is per-browser (stored in `localStorage`) and sent to the server on each new session.
