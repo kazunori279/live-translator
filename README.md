@@ -1,6 +1,6 @@
 # Live Translator
 
-Real-time audio translation powered by Gemini Live API. Speak in any language and hear the translation immediately. Three modes: agent mode (97 languages, glossary, voice replication), simultaneous translation mode (78 languages, auto-detect source language), and conversation mode (a bidirectional interpreter between two languages, so two people can talk to each other).
+Real-time audio translation powered by Gemini Live API. Speak in any language and hear the translation immediately. Three modes: agent mode (97 languages, glossary), simultaneous translation mode (78 languages, auto-detect source language), and conversation mode (a bidirectional interpreter between two languages, so two people can talk to each other).
 
 ![Demo](demo.gif)
 
@@ -48,7 +48,6 @@ Differences from agent mode:
 - **Auto-detect**: no need to select a source language
 - **78 languages** supported (vs 97 in agent mode)
 - **No glossary**: custom term pinning is not available
-- **No voice replication**: the Voice Replication section is disabled in Voice & Audio settings
 - **Idle timer**: since the model doesn't send turn-complete signals, transcription bubbles are finalized after 2 seconds of silence
 
 Language selections are preserved when switching modes — codes are mapped automatically between the two language sets (e.g. `zh` ↔ `zh-Hans`).
@@ -67,9 +66,11 @@ Details:
 
 Toggle **Push to Talk** on the right to switch from always-on to manual control. Hold the **Hold to Talk** button (or press spacebar) to transmit, release to stop.
 
-### Audio Settings
+### Voice & Audio Settings
 
-Click **Audio** in the header to select which microphone and speaker to use. Choices are saved in your browser and applied on the next session.
+Click **Voice & Audio** in the header to pick the microphone, the speaker, and the **translation voice** — one of the 30 prebuilt Gemini Live voices, listed with its tone (e.g. `Kore — Firm`, `Sulafat — Warm`). All three choices are saved in your browser.
+
+The voice is part of the Live session's config, so switching it reconnects the session (the transcript is cleared). It applies to all three modes. Unknown voice names sent by a client are rejected server-side and fall back to the default (`Puck`), since the Live API refuses to connect on an unrecognised voice.
 
 ### Glossary
 
@@ -128,8 +129,8 @@ sequenceDiagram
     participant G as Gemini Live API
 
     B->>S: WS /ws/{user}/{sid}?src&tgt[&simul]
-    B->>S: JSON setup {glossary}
-    S->>G: live.connect(sysInstruction)
+    B->>S: JSON setup {glossary, voice}
+    S->>G: live.connect(sysInstruction, speechConfig)
 
     rect rgb(240, 248, 255)
     note over B,G: Translation loop (repeat per utterance)
@@ -167,7 +168,7 @@ FastAPI bridges one browser WebSocket to a series of Gemini Live API sessions. T
 
 **Agent mode** uses `gemini-3.1-flash-live-preview` via the Gemini API (`generativelanguage.googleapis.com`). The system instruction (built in `app/translator_agent/agent.py`) tells the model to translate only the current utterance and never repeat previous translations. The glossary is embedded as `source → target` pairs with case-insensitive matching.
 
-**Simultaneous translation mode** uses `gemini-3.5-live-translate-preview` with a `TranslationConfig` instead of system instructions. The config specifies `target_language_code` and `echo_target_language=True` (so the model echoes back what it hears in the target language). This model auto-detects the source language and does not support tools, glossary, or voice replication.
+**Simultaneous translation mode** uses `gemini-3.5-live-translate-preview` with a `TranslationConfig` instead of system instructions. The config specifies `target_language_code` and `echo_target_language=True` (so the model echoes back what it hears in the target language). This model auto-detects the source language and does not support tools or glossary.
 
 **Conversation mode** reuses the agent model (`gemini-3.1-flash-live-preview`) but with a bidirectional interpreter system instruction (`build_conversation_instruction` in `app/translator_agent/agent.py`): it tells the model to detect which of the two configured languages each utterance is in and reply in the other. The WebSocket carries a `convo=true` query param; the glossary is embedded bidirectionally (`source ↔ target`).
 

@@ -149,8 +149,64 @@ def _glossary_section(entries: list[GlossaryEntry]) -> str:
 
 
 MODEL = os.getenv("DEMO_AGENT_MODEL", "gemini-3.1-flash-live-preview")
-VR_MODEL = "gemini-3.1-flash-live-vr-eap"
 SIMUL_MODEL = "gemini-3.5-live-translate-preview"
+
+# The 30 prebuilt voices the Live API exposes, with the tone descriptor Google
+# publishes for each. Both MODEL and SIMUL_MODEL accept any of them.
+#
+# This list is a whitelist, not just UI decoration: an unknown voice name makes
+# live.connect() fail with `1007 No matching speaker voice found`, and the
+# reconnect loop in main.py would retry that failure forever. Everything
+# arriving from a client is checked against it.
+VOICES: dict[str, str] = {
+    "Zephyr": "Bright",
+    "Puck": "Upbeat",
+    "Charon": "Informative",
+    "Kore": "Firm",
+    "Fenrir": "Excitable",
+    "Leda": "Youthful",
+    "Orus": "Firm",
+    "Aoede": "Breezy",
+    "Callirrhoe": "Easy-going",
+    "Autonoe": "Bright",
+    "Enceladus": "Breathy",
+    "Iapetus": "Clear",
+    "Umbriel": "Easy-going",
+    "Algieba": "Smooth",
+    "Despina": "Smooth",
+    "Erinome": "Clear",
+    "Algenib": "Gravelly",
+    "Rasalgethi": "Informative",
+    "Laomedeia": "Upbeat",
+    "Achernar": "Soft",
+    "Alnilam": "Firm",
+    "Schedar": "Even",
+    "Gacrux": "Mature",
+    "Pulcherrima": "Forward",
+    "Achird": "Friendly",
+    "Zubenelgenubi": "Casual",
+    "Vindemiatrix": "Gentle",
+    "Sadachbia": "Lively",
+    "Sadaltager": "Knowledgeable",
+    "Sulafat": "Warm",
+}
+
+# The Live API's own default when no speech_config is supplied.
+DEFAULT_VOICE = "Puck"
+
+
+def resolve_voice(name: str | None) -> str:
+    """Return *name* if it is a known voice, else DEFAULT_VOICE.
+
+    Matched case-insensitively so a differently-cased value from a client still
+    resolves to the canonical spelling the API expects.
+    """
+    if not name:
+        return DEFAULT_VOICE
+    for voice in VOICES:
+        if voice.lower() == name.strip().lower():
+            return voice
+    return DEFAULT_VOICE
 
 SIMUL_LANGUAGES = {
     "af": "Afrikaans",

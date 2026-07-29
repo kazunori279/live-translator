@@ -30,16 +30,18 @@ from google.genai import types  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).parent))
 from translator_agent import (  # noqa: E402
+    DEFAULT_VOICE,
     LANGUAGES,
     MODEL,
     POPULAR_LANGUAGES,
     SIMUL_LANGUAGES,
     SIMUL_MODEL,
     SIMUL_POPULAR_LANGUAGES,
-    VR_MODEL,
+    VOICES,
     build_conversation_instruction,
     build_system_instruction,
     load_default_glossary,
+    resolve_voice,
     simul_language_code,
 )
 
@@ -110,10 +112,11 @@ async def get_languages():
         "languages": LANGUAGES,
         "popular": POPULAR_LANGUAGES,
         "model": MODEL,
-        "vrModel": VR_MODEL,
         "simulModel": SIMUL_MODEL,
         "simulLanguages": SIMUL_LANGUAGES,
         "simulPopular": SIMUL_POPULAR_LANGUAGES,
+        "voices": VOICES,
+        "defaultVoice": DEFAULT_VOICE,
     }
 
 
@@ -131,12 +134,11 @@ async def get_default_glossary():
 @dataclass
 class SetupData:
     glossary: list[tuple[str, str, str]] = field(default_factory=list)
-    vr_voice_sample: bytes | None = None
-    vr_consent_audio: bytes | None = None
+    voice: str = DEFAULT_VOICE
 
 
 def _parse_setup(raw: str) -> SetupData:
-    """Parse the client's setup message into glossary + optional voice replication data."""
+    """Parse the client's setup message into glossary + output voice."""
     try:
         data = json.loads(raw)
     except json.JSONDecodeError:
@@ -153,24 +155,13 @@ def _parse_setup(raw: str) -> SetupData:
         disp = disp_raw.strip() if isinstance(disp_raw, str) and disp_raw.strip() else tgt
         entries.append((src, tgt, disp))
 
-    vr_sample = None
-    vr_consent = None
-    vr = data.get("voiceReplication")
-    if isinstance(vr, dict):
-        sample_b64 = vr.get("voiceSample")
-        consent_b64 = vr.get("consentAudio")
-        if isinstance(sample_b64, str) and isinstance(consent_b64, str):
-            try:
-                vr_sample = base64.b64decode(sample_b64)
-                vr_consent = base64.b64decode(consent_b64)
-                logger.info(
-                    "Voice replication: sample=%d bytes, consent=%d bytes",
-                    len(vr_sample), len(vr_consent),
-                )
-            except Exception:  # noqa: BLE001
-                logger.warning("Invalid base64 in voiceReplication data")
+    # Anything unrecognised falls back to the default: an unknown voice name is a
+    # hard connect-time failure upstream ("No matching speaker voice found"),
+    # which session_loop would retry forever.
+    raw_voice = data.get("voice")
+    voice = resolve_voice(raw_voice if isinstance(raw_voice, str) else None)
 
-    return SetupData(glossary=entries, vr_voice_sample=vr_sample, vr_consent_audio=vr_consent)
+    return SetupData(glossary=entries, voice=voice)
 
 
 def _envelope_from(msg: types.LiveServerMessage) -> dict | None:
@@ -253,7 +244,10 @@ async def websocket_endpoint(
             websocket.receive_text(), timeout=SETUP_TIMEOUT_SEC
         )
         setup_data = _parse_setup(setup_raw)
-        logger.debug("Setup received: %d glossary entries", len(setup_data.glossary))
+        logger.debug(
+            "Setup received: %d glossary entries, voice=%s",
+            len(setup_data.glossary), setup_data.voice,
+        )
     except asyncio.TimeoutError:
         logger.warning(
             "No setup message within %ds; using default glossary.", SETUP_TIMEOUT_SEC
@@ -263,9 +257,7 @@ async def websocket_endpoint(
         return
 
     glossary_entries = setup_data.glossary if setup_data else None
-    vr_voice_sample = setup_data.vr_voice_sample if setup_data else None
-    vr_consent_audio = setup_data.vr_consent_audio if setup_data else None
-    vr_enabled = vr_voice_sample is not None and vr_consent_audio is not None
+    voice = setup_data.voice if setup_data else DEFAULT_VOICE
 
     display_map = _build_display_map(
         glossary_entries if glossary_entries is not None else load_default_glossary()
@@ -275,7 +267,6 @@ async def websocket_endpoint(
         active_model = SIMUL_MODEL
         system_instruction = None
         target_code = simul_language_code(target)
-        vr_enabled = False
         logger.info(
             "Simultaneous mode: model=%s, target=%s, target_code=%s",
             active_model, target, target_code,
@@ -291,9 +282,9 @@ async def websocket_endpoint(
                 source, target, glossary_entries
             )
         target_code = None
-        active_model = VR_MODEL if vr_enabled else MODEL
-        if vr_enabled:
-            logger.info("Voice replication enabled, using model %s", active_model)
+        active_model = MODEL
+
+    logger.info("Output voice: %s", voice)
 
     # Shared state between the upstream forwarder and the session loop. The
     # forwarder has the lifetime of the browser WebSocket and writes to whichever
@@ -337,6 +328,14 @@ async def websocket_endpoint(
                 response_modalities=[types.Modality.AUDIO],
                 input_audio_transcription=types.AudioTranscriptionConfig(),
                 output_audio_transcription=types.AudioTranscriptionConfig(),
+                # Both models accept the same prebuilt voice set.
+                speech_config=types.SpeechConfig(
+                    voice_config=types.VoiceConfig(
+                        prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                            voice_name=voice
+                        )
+                    )
+                ),
             )
             if simul:
                 kwargs["translation_config"] = types.TranslationConfig(
@@ -347,16 +346,6 @@ async def websocket_endpoint(
                 kwargs["system_instruction"] = types.Content(
                     parts=[types.Part(text=system_instruction)]
                 )
-                if vr_enabled:
-                    kwargs["speech_config"] = types.SpeechConfig(
-                        voice_config=types.VoiceConfig(
-                            replicated_voice_config=types.ReplicatedVoiceConfig(
-                                mime_type="audio/wav",
-                                voice_sample_audio=vr_voice_sample,
-                                consent_audio=vr_consent_audio,
-                            )
-                        )
-                    )
             cfg = types.LiveConnectConfig(**kwargs)
             logger.debug("LiveConnectConfig: %s", cfg.model_dump(exclude_none=True))
             return cfg
