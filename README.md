@@ -235,13 +235,16 @@ What gets replayed into a replacement is decided by one rule: **the audio captur
 
 This also covers the case the thresholds alone miss: a GoAway that lands mid-sentence on a session that had already been quiet for longer than the grace. The cutover then happens within milliseconds and the mirror never attaches, but the sentence so far is still owed to the replacement, and is handed to it the moment it is adopted.
 
-**What it costs the listener.** Measured across two 30-minute soaks, a GoAway takes one of three paths:
+**What it costs the listener.** Across 11 GoAways observed in soak testing (two 30-minute local runs and one 1-hour Cloud Run run), a GoAway takes one of four paths:
 
-| Path | Frequency | Effect |
+| Path | Observed | Effect |
 |---|---|---|
-| Old session finishes its turn | most common | none — the swap happens between turns, mic audio keeps flowing to the dying session throughout |
-| Drain stalls and never recovers | occasional | up to 5s before the translation lands. The mirror means the replacement has been working on that audio for the last 2s, so it flushes shortly after the swap rather than starting cold |
-| GoAway lands mid-sentence on an already-quiet session | seen once in 200 iterations | cutover in ~4ms, the sentence so far (3.5s, 111,616 bytes in the observed case) replayed 197ms later. Before the replay was added, all but the last word of that sentence was lost |
+| Old session finishes its turn | — | none — the swap happens between turns, mic audio keeps flowing to the dying session throughout |
+| Drain stalls, then recovers and completes its turn | 5 | none to the listener. The mirrored replacement heard audio the old session went on to answer, so it is discarded and a fresh one opened (~190ms, off the critical path) |
+| Drain stalls and never recovers | 3 | up to 5s before the translation lands, and only in a window where nothing was being delivered anyway. All three landed between utterances with no audio owed. The mirror means the replacement has been working on that audio for the last 2s, so it flushes shortly after the swap rather than starting cold |
+| GoAway lands mid-sentence on an already-quiet session | 3 | cutover in 2–4ms, the sentence so far (1.4–3.5s of audio) replayed 83–197ms later. All three iterations scored 10/10 at normal latency. Before the replay was added, all but the last word of that sentence was lost |
+
+The soak speaks one sentence every ~17s with quiet gaps in between, which biases heavily towards the stalled paths — continuous speech keeps the drain talking and takes the first row far more often than these counts suggest.
 
 The speaker never has to pause or repeat — every frame is captured regardless of which session is live. On the two cutover paths the seam is visible rather than audible: the synthetic `turnComplete` closes the caption the abandoned turn left open, and the replacement's translation of the same audio appears as a new caption below it.
 
@@ -250,7 +253,7 @@ The speaker never has to pause or repeat — every frame is captured regardless 
 **Limitations:**
 
 - The model on the new session has no context from the previous one, so it starts fresh. The replay covers the audio, not the history.
-- On the cutover paths, mic audio arriving between the cutover and the adoption of the replacement (~190ms) is still dropped: `pending_preroll` is captured as bytes at cutover, so frames landing during the wait are not in it. Capturing the cut timestamp instead and building the replay at adoption would close this.
+- On the cutover paths, mic audio arriving between the cutover and the adoption of the replacement (83–197ms observed) is still dropped: `pending_preroll` is captured as bytes at cutover, so frames landing during the wait are not in it. Capturing the cut timestamp instead and building the replay at adoption would close this.
 
 Session resumption was intentionally removed — it caused an off-by-one translation cascade where the model would prepend the previous turn's translation to the current one. Without resumption, each session starts clean, which proved more reliable (98% pass rate vs 65% with resumption in 1-hour soak tests).
 
@@ -321,68 +324,70 @@ Options: `--url` (WebSocket base URL), `--duration` (seconds), `--source`/`--tar
 
 #### Latest soak test results (1 hour, en → ja, Cloud Run)
 
+Six GoAways at a ~9-minute cadence, covering all three drain paths: two instant cutovers that replayed unanswered audio (84,992 and 44,032 bytes, delivered 93ms and 83ms after the GoAway), two stalled drains that recovered and had their mirrored replacement discarded, and two silent cutovers between utterances with nothing owed. Every iteration spanning one scored 10/10 at normal latency. The single failure is the last iteration, truncated by the duration limit.
+
 ```
-Duration: 3633s | Iterations: 198 | Passed: 198/198 (100.0%) | Avg score: 9.9/10 | Errors: 0
+Duration: 3633s | Iterations: 207 | Passed: 206/207 (99.5%) | Avg score: 9.9/10 | Errors: 0
 
-  Translation Score (n=198)
-  min=8.00  avg=9.93  p50=10.00  p90=10.00  p99=10.00  max=10.00
+  Translation Score (n=207)
+  min=6.00  avg=9.90  p50=10.00  p90=10.00  p99=10.00  max=10.00
          0-2:    0 (  0.0%) 
          3-4:    0 (  0.0%) 
-         5-6:    0 (  0.0%) 
-         7-8:    1 (  0.5%) 
-        9-10:  197 ( 99.5%) ##############################
+         5-6:    1 (  0.5%) 
+         7-8:    3 (  1.4%) 
+        9-10:  203 ( 98.1%) ##############################
 
-  Glossary Iteration Score (n=66)
-  min=9.00  avg=9.95  p50=10.00  p90=10.00  p99=10.00  max=10.00
+  Glossary Iteration Score (n=69)
+  min=6.00  avg=9.90  p50=10.00  p90=10.00  p99=10.00  max=10.00
          0-2:    0 (  0.0%) 
          3-4:    0 (  0.0%) 
-         5-6:    0 (  0.0%) 
-         7-8:    0 (  0.0%) 
-        9-10:   66 (100.0%) ##############################
+         5-6:    1 (  1.4%) 
+         7-8:    1 (  1.4%) 
+        9-10:   67 ( 97.1%) ##############################
 
-  First Response (speech-end to first audio/transcript) (n=198)
-  min=0.00  avg=0.04  p50=0.00  p90=0.07  p99=1.20  max=2.24
-         =0s:  156 ( 78.8%) ##############################
-      0-0.1s:   25 ( 12.6%) ####
-    0.1-0.5s:   12 (  6.1%) ##
-      0.5-1s:    3 (  1.5%) 
-        1-2s:    1 (  0.5%) 
-        2-5s:    1 (  0.5%) 
+  First Response (speech-end to first audio/transcript) (n=207)
+  min=0.00  avg=0.02  p50=0.00  p90=0.07  p99=0.41  max=0.51
+         =0s:  142 ( 68.6%) ##############################
+      0-0.1s:   52 ( 25.1%) ##########
+    0.1-0.5s:   12 (  5.8%) ##
+      0.5-1s:    1 (  0.5%) 
+        1-2s:    0 (  0.0%) 
+        2-5s:    0 (  0.0%) 
          >5s:    0 (  0.0%) 
 
-  Turn Complete (speech-end to full translation) (n=197)
-  min=3.50  avg=5.58  p50=5.51  p90=6.82  p99=8.12  max=9.47
+  Turn Complete (speech-end to full translation) (n=206)
+  min=3.39  avg=5.21  p50=5.21  p90=6.14  p99=7.11  max=7.18
          <2s:    0 (  0.0%) 
         2-3s:    0 (  0.0%) 
-        3-4s:   13 (  6.6%) ##
-        4-5s:   35 ( 17.8%) #######
-        5-7s:  136 ( 69.0%) ##############################
-       7-10s:   13 (  6.6%) ##
+        3-4s:   12 (  5.8%) ##
+        4-5s:   65 ( 31.6%) ###############
+        5-7s:  126 ( 61.2%) ##############################
+       7-10s:    3 (  1.5%) 
         >10s:    0 (  0.0%) 
 
-  Input Transcription Score (n=198)
-  min=5.00  avg=9.94  p50=10.00  p90=10.00  p99=10.00  max=10.00
+  Input Transcription Score (n=207)
+  min=4.00  avg=9.94  p50=10.00  p90=10.00  p99=10.00  max=10.00
          0-2:    0 (  0.0%) 
-         3-4:    0 (  0.0%) 
-         5-6:    1 (  0.5%) 
+         3-4:    1 (  0.5%) 
+         5-6:    0 (  0.0%) 
          7-8:    0 (  0.0%) 
-        9-10:  197 ( 99.5%) ##############################
+        9-10:  206 ( 99.5%) ##############################
 
-  Output Transcription Score (n=198)
-  min=2.00  avg=9.54  p50=10.00  p90=10.00  p99=10.00  max=10.00
-         0-2:    2 (  1.0%) 
-         3-4:    0 (  0.0%) 
-         5-6:    1 (  0.5%) 
-         7-8:   20 ( 10.1%) ###
-        9-10:  175 ( 88.4%) ##############################
+  Output Transcription Score (n=207)
+  min=4.00  avg=9.56  p50=10.00  p90=10.00  p99=10.00  max=10.00
+         0-2:    0 (  0.0%) 
+         3-4:    1 (  0.5%) 
+         5-6:    4 (  1.9%) 
+         7-8:   20 (  9.7%) ###
+        9-10:  182 ( 87.9%) ##############################
 
-  Total Iteration Time (n=198)
-  min=13.39  avg=18.35  p50=18.08  p90=20.99  p99=23.89  max=45.31
+  Total Iteration Time (n=207)
+  min=13.68  avg=17.55  p50=17.38  p90=19.37  p99=21.03  max=45.33
         <10s:    0 (  0.0%) 
-      10-15s:   10 (  5.1%) ##
-      15-20s:  143 ( 72.2%) ##############################
-      20-25s:   44 ( 22.2%) #########
+      10-15s:   10 (  4.8%) #
+      15-20s:  184 ( 88.9%) ##############################
+      20-25s:   12 (  5.8%) #
       25-30s:    0 (  0.0%) 
-        >30s:    1 (  0.5%) 
+        >30s:    1 (  0.5%)
 ```
 
