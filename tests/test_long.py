@@ -371,6 +371,8 @@ async def run_iteration(
     first_response_at: list[float] = []
     speech_done_at: list[float] = []
     turn_complete_at: list[float] = []
+    # Set by the stale-frame flush below; read back in the receive loop.
+    stale_turn_open = [False]
 
     async def receive_responses():
         try:
@@ -405,12 +407,38 @@ async def run_iteration(
                     first_response_at.append(time.monotonic())
 
                 if msg.get("turnComplete"):
+                    # Not ours if it closes the turn the flush was still
+                    # reading, or if nothing has arrived for this one yet —
+                    # a turn boundary with no content in front of it belongs
+                    # to whatever came before.
+                    if stale_turn_open[0] or not first_response_at:
+                        stale_turn_open[0] = False
+                        continue
                     turn_complete_at.append(time.monotonic())
                     turn_complete.set()
         except asyncio.TimeoutError:
             pass
         except websockets.ConnectionClosed:
             pass
+
+    # Anything still queued belongs to a turn we already gave up on. A session
+    # swap emits a synthetic turnComplete for the turn it abandons, and the
+    # replacement then answers that audio anyway — after the iteration gave up.
+    # One socket serves the whole run, so reading those frames here would score
+    # this sentence against the previous one and, worse, leave every later
+    # iteration a turn behind for the rest of the run.
+    stale = 0
+    while True:
+        try:
+            raw = await asyncio.wait_for(ws.recv(), timeout=0.25)
+        except (asyncio.TimeoutError, websockets.ConnectionClosed):
+            break
+        stale += 1
+        # Track whether that turn is still open, so its trailing turnComplete
+        # can be recognised if it arrives after this flush rather than during.
+        stale_turn_open[0] = not json.loads(raw).get("turnComplete")
+    if stale:
+        print(f"[{stamp()}] #{index} dropped {stale} stale frame(s) from the previous turn")
 
     recv_task = asyncio.create_task(receive_responses())
 

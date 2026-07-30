@@ -201,12 +201,41 @@ sequenceDiagram
     S->>N: send_realtime_input(audio)
 ```
 
-1. A new session starts opening immediately in the background (`_open_next()`)
+1. A new session starts opening immediately in the background (`_open_next()`), ready in ~200ms
 2. The old session continues draining — any in-progress translation completes and is forwarded to the browser
-3. After the old session ends (or the GoAway deadline expires), the pre-opened session becomes the active session
+3. After the old session ends, the pre-opened session becomes the active session
 4. Audio from the browser is routed to the new session with no gap
 
-**Limitation:** If GoAway fires mid-utterance, the translation in progress may be lost. The model on the new session has no context from the previous session, so it starts fresh. In practice this affects ~1-2% of translations during long sessions.
+A drain that never finishes its turn is the awkward case: waiting out the whole GoAway deadline is dead air the listener hears in full, and observed deadlines are as long as 50s. Two thresholds bound it, both measured from the last frame actually forwarded to the browser (heartbeats don't count, so a turn genuinely in flight is never clipped):
+
+```mermaid
+sequenceDiagram
+    participant B as Browser
+    participant S as Server (FastAPI)
+    participant O as Old Session
+    participant N as New Session
+
+    O-->>S: GoAway (time_left=50s)
+    S->>N: live.connect() (pre-open in background)
+    note over S,O: drain — but the old session stops answering
+    B->>S: binary PCM 16kHz
+    note over S: every frame kept in recent_audio (~10s ring)
+    note over S,O: quiet 3s → drain declared stalled
+    S->>N: replay unanswered audio, then tee live audio
+    note over S,O: quiet 5s → cut over
+    S-->>B: {turnComplete} (closes the abandoned caption)
+    note over S: new session adopted — already warm
+```
+
+5. At `DRAIN_MIRROR_QUIET_SEC` (3s of quiet) the drain is treated as stalled and the microphone is teed into the replacement as well — speech going into a session that has stopped answering still reaches one that hasn't
+6. At `GOAWAY_IDLE_GRACE_SEC` (5s of quiet) the swap happens, instead of waiting out the deadline. The abandoned turn will never report itself complete, so the server sends a synthetic `turnComplete` to close the caption the client left open
+7. If a mirrored drain recovers and completes its turn after all, the replacement is discarded and a fresh one opened — it heard audio the old session went on to answer, so keeping it would mean translating the same words twice
+
+What gets replayed into a replacement is decided by one rule: **the audio captured since the outgoing session last said anything.** Nothing was relayed after that point, so none of it has been translated, and anything older has been — replaying that too would translate the same words twice. `recent_audio` keeps every mic frame with its arrival time for ~10s so the cut can be made at that boundary rather than at a fixed offset.
+
+This also covers the case the thresholds alone miss: a GoAway that lands mid-sentence on a session that had already been quiet for longer than the grace. The cutover then happens within milliseconds and the mirror never attaches, but the sentence so far is still owed to the replacement, and is handed to it the moment it is adopted.
+
+**Limitation:** The model on the new session has no context from the previous one, so it starts fresh. The replay covers the audio, not the history.
 
 Session resumption was intentionally removed — it caused an off-by-one translation cascade where the model would prepend the previous turn's translation to the current one. Without resumption, each session starts clean, which proved more reliable (98% pass rate vs 65% with resumption in 1-hour soak tests).
 
