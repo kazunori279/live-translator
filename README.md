@@ -161,7 +161,7 @@ FastAPI bridges one browser WebSocket to a series of Gemini Live API sessions. T
 3. Two background coroutines run concurrently:
    - **session_loop** opens a Gemini Live session, drains messages from it, and forwards them as JSON envelopes to the browser
    - **upstream_task** forwards binary audio frames from the browser WS to whichever upstream session is current
-4. When the upstream session sends a GoAway (expiring in ~30s), the server immediately starts opening the next session in the background while continuing to drain the current one — this eliminates dead time between sessions
+4. When the upstream session sends a GoAway (observed `time_left=50s`), the server immediately starts opening the next session in the background while continuing to drain the current one — this eliminates dead time between sessions
 5. Once the old session finishes, the pre-opened session takes over seamlessly
 
 **Wire format:** Each `LiveServerMessage` is translated into a camelCase JSON envelope the frontend understands (`turnComplete`, `inputTranscription`, `outputTranscription`, `content.parts[]`, `usageMetadata`).
@@ -180,7 +180,7 @@ Audio input is 16 kHz mono PCM; output is 24 kHz PCM (both modes).
 
 ### GoAway Handling
 
-Gemini Live API sessions expire after ~15 minutes. When the server receives a GoAway message:
+Gemini Live sessions do not last indefinitely. In 30-minute soaks a GoAway arrived every ~9 minutes, always with `time_left=50s`. When the server receives one:
 
 ```mermaid
 sequenceDiagram
@@ -189,7 +189,7 @@ sequenceDiagram
     participant O as Old Session
     participant N as New Session
 
-    O-->>S: GoAway (time_left=30s)
+    O-->>S: GoAway (time_left=50s)
     S->>N: live.connect() (pre-open in background)
     note over S,O: drain old session — continue forwarding messages
     O-->>S: outputTranscription / audio chunks
@@ -206,7 +206,7 @@ sequenceDiagram
 3. After the old session ends, the pre-opened session becomes the active session
 4. Audio from the browser is routed to the new session with no gap
 
-A drain that never finishes its turn is the awkward case: waiting out the whole GoAway deadline is dead air the listener hears in full, and observed deadlines are as long as 50s. Two thresholds bound it, both measured from the last frame actually forwarded to the browser (heartbeats don't count, so a turn genuinely in flight is never clipped):
+A drain that never finishes its turn is the awkward case: waiting out the whole 50s deadline is dead air the listener hears in full. Two thresholds bound it, both measured from the last frame actually forwarded to the browser (heartbeats don't count, so a turn genuinely in flight is never clipped):
 
 ```mermaid
 sequenceDiagram
@@ -235,7 +235,22 @@ What gets replayed into a replacement is decided by one rule: **the audio captur
 
 This also covers the case the thresholds alone miss: a GoAway that lands mid-sentence on a session that had already been quiet for longer than the grace. The cutover then happens within milliseconds and the mirror never attaches, but the sentence so far is still owed to the replacement, and is handed to it the moment it is adopted.
 
-**Limitation:** The model on the new session has no context from the previous one, so it starts fresh. The replay covers the audio, not the history.
+**What it costs the listener.** Measured across two 30-minute soaks, a GoAway takes one of three paths:
+
+| Path | Frequency | Effect |
+|---|---|---|
+| Old session finishes its turn | most common | none — the swap happens between turns, mic audio keeps flowing to the dying session throughout |
+| Drain stalls and never recovers | occasional | up to 5s before the translation lands. The mirror means the replacement has been working on that audio for the last 2s, so it flushes shortly after the swap rather than starting cold |
+| GoAway lands mid-sentence on an already-quiet session | seen once in 200 iterations | cutover in ~4ms, the sentence so far (3.5s, 111,616 bytes in the observed case) replayed 197ms later. Before the replay was added, all but the last word of that sentence was lost |
+
+The speaker never has to pause or repeat — every frame is captured regardless of which session is live. On the two cutover paths the seam is visible rather than audible: the synthetic `turnComplete` closes the caption the abandoned turn left open, and the replacement's translation of the same audio appears as a new caption below it.
+
+**Watch out for turn accounting.** The synthetic `turnComplete` is a turn boundary with no turn behind it. Anything pairing utterances 1:1 with turn boundaries over a long-lived socket will sit one turn behind for the rest of the connection once a cutover happens — the soak test did exactly this and reported 68% while translation itself was perfect. `tests/test_long.py` now flushes frames belonging to a turn it gave up on and rejects a boundary with no content in front of it; the browser client is unaffected because `finalizeTurn()` on an already-closed caption is a no-op.
+
+**Limitations:**
+
+- The model on the new session has no context from the previous one, so it starts fresh. The replay covers the audio, not the history.
+- On the cutover paths, mic audio arriving between the cutover and the adoption of the replacement (~190ms) is still dropped: `pending_preroll` is captured as bytes at cutover, so frames landing during the wait are not in it. Capturing the cut timestamp instead and building the replay at adoption would close this.
 
 Session resumption was intentionally removed — it caused an off-by-one translation cascade where the model would prepend the previous turn's translation to the current one. Without resumption, each session starts clean, which proved more reliable (98% pass rate vs 65% with resumption in 1-hour soak tests).
 
@@ -253,6 +268,7 @@ These errors cascaded: a mid-session kill triggered a retry with a flat 1s delay
 1. **Connect timeout** (`CONNECT_TIMEOUT_SEC = 10`): The `conn.__aenter__()` call has a hard timeout so a hanging connect fails fast instead of blocking indefinitely.
 2. **Exponential backoff**: Retries start at 0.2s and double on each consecutive failure, capping at 4s. The backoff resets after a successful session. This avoids thrashing the API while still recovering quickly from transient blips.
 3. **Transparent reconnect**: The browser WebSocket stays open during retries — only the upstream Gemini session is affected. Once a new session opens, `upstream_task` resumes forwarding audio to it automatically.
+4. **No deadlock on the retry path**: `next_ready` is set only by the GoAway pre-open. Waiting on it when no open is in flight — after a session error, say — parked the loop forever, so the wait is gated on an `open_pending` flag and the error path clears it. This showed up in production as the app going unresponsive until the browser reconnected.
 
 After the fix, production logs showed 1 error in 15 hours (vs ~12 in the same period before), with zero connect-time rejections — the faster initial retry reconnects before the cascading failure pattern kicks in.
 
