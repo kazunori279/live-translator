@@ -13,6 +13,11 @@ const overlayChannel = new BroadcastChannel("live-translator");
 let is_audio = false;
 let pttMode = false;
 let audioInitialized = false;
+// In always-on mode the Start button has nothing left to do once audio is
+// running, so it becomes the microphone mute control. micRunning gates that
+// second life: audioInitialized flips before the mic is actually up.
+let micRunning = false;
+let micMuted = false;
 
 const SIMUL_KEY = "live-translator.simul";
 const CONVO_KEY = "live-translator.convo";
@@ -548,6 +553,9 @@ function startAudio() {
       // Leave the app usable and let Start be clicked again.
       audioInitialized = false;
       is_audio = false;
+      micRunning = false;
+      micMuted = false;
+      updateMicButton();
       startAudioButton.disabled = false;
       addSystemMessage(`Could not start audio: ${errMsg}`);
       return;
@@ -557,6 +565,11 @@ function startAudio() {
     if (pttMode) {
       startAudioButton.disabled = false;
       is_audio = false;
+    } else {
+      // The mic is live, so the button turns into Mute.
+      micRunning = true;
+      updateMicButton();
+      startAudioButton.disabled = false;
     }
   }
 
@@ -672,9 +685,32 @@ function getLanguageNames() {
   return { src, tgt };
 }
 
-// Always-on mode: click Start
+// The Start button doubles as the microphone mute control once audio is
+// running: in always-on mode there is nothing else left to click, and a mic
+// that cannot be silenced is a hazard in a room left connected.
+function updateMicButton() {
+  if (pttMode) return;
+  if (!micRunning) {
+    startAudioButton.textContent = "Start";
+    startAudioButton.classList.remove("muted");
+    return;
+  }
+  startAudioButton.textContent = micMuted ? "Unmute" : "Mute";
+  startAudioButton.classList.toggle("muted", micMuted);
+}
+
+// Always-on mode: click Start, then the same button mutes/unmutes.
 startAudioButton.addEventListener("click", () => {
   if (pttMode) return;
+  if (micRunning) {
+    // Only stop sending frames — the mic stream stays open so unmuting is
+    // instant and never re-prompts for permission.
+    micMuted = !micMuted;
+    is_audio = !micMuted;
+    updateMicButton();
+    addSystemMessage(micMuted ? "Microphone muted" : "Microphone unmuted");
+    return;
+  }
   startAudioButton.disabled = true;
   initAudioIfNeeded();
   is_audio = true;
@@ -684,6 +720,10 @@ startAudioButton.addEventListener("click", () => {
 pttToggle.addEventListener("change", () => {
   pttMode = pttToggle.checked;
   if (pttMode) {
+    // PTT owns the button's label and colour, so drop the mute role.
+    micRunning = false;
+    micMuted = false;
+    startAudioButton.classList.remove("muted");
     startAudioButton.classList.add("ptt-mode");
     if (!audioInitialized) {
       startAudioButton.disabled = true;
@@ -701,6 +741,8 @@ pttToggle.addEventListener("change", () => {
     startAudioButton.textContent = "Start";
     is_audio = false;
     audioInitialized = false;
+    micRunning = false;
+    micMuted = false;
     reconnectWithNewLanguage();
   }
 });

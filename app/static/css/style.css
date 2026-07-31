@@ -467,6 +467,16 @@ button {
   box-shadow: 0 0 0 4px rgba(229, 57, 53, 0.25);
 }
 
+/* Muted: the mic is live but nothing is being sent. Grey reads as "off"
+   against the red the button wears while it is actually capturing. */
+#startAudioButton.muted {
+  background-color: #5f6368;
+}
+
+#startAudioButton.muted:hover:not(:disabled) {
+  background-color: #3c4043;
+}
+
 /* Toggle group */
 .toggle-group {
   display: flex;
