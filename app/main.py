@@ -378,9 +378,21 @@ async def websocket_endpoint(
                 ),
             )
             if simul:
+                # echo_target_language=False is this mode's echo guard. The
+                # translation model takes no system instruction, so the prompt-
+                # level _ECHO_GUARD used by the other two modes is unavailable
+                # here. With True the model parrots any input already in the
+                # target language — and our own output is, by construction, in
+                # the target language, so speakers feeding the mic gave a loop
+                # with gain ~1 that never decayed. False makes the model stay
+                # silent on target-language input instead.
+                #
+                # The cost: a human genuinely speaking the target language gets
+                # no audio out. For one-way simultaneous translation that is
+                # what you want anyway — the room already understands them.
                 kwargs["translation_config"] = types.TranslationConfig(
                     target_language_code=target_code,
-                    echo_target_language=True,
+                    echo_target_language=False,
                 )
             else:
                 kwargs["system_instruction"] = types.Content(

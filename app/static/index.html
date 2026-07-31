@@ -124,7 +124,10 @@
                 <div class="custom-select-dropdown" id="sourceLangDropdown"></div>
                 <input type="hidden" id="sourceLang" value="en">
               </div>
-              <button class="lang-swap-btn" id="swapLangs" title="Swap languages">⇄</button>
+              <!-- Conversation mode interprets both ways, so there is no
+                   direction to swap: this is a label, not a control. Hidden
+                   in Simul mode, which is one-way into the target language. -->
+              <span class="lang-bidi-icon" id="bidiIcon" title="Both directions are interpreted">⇄</span>
               <div class="custom-select" id="targetLangWrapper">
                 <button class="custom-select-trigger" id="targetLangTrigger">Japanese (日本語)</button>
                 <div class="custom-select-dropdown" id="targetLangDropdown"></div>
@@ -133,11 +136,6 @@
             </div>
             <button type="button" id="startAudioButton" disabled>Start</button>
             <div class="toggle-group">
-              <label class="ptt-toggle">
-                <input type="checkbox" id="convoToggle">
-                <span class="ptt-slider"></span>
-                <span class="ptt-label">Conversation</span>
-              </label>
               <label class="ptt-toggle">
                 <input type="checkbox" id="simulToggle">
                 <span class="ptt-slider"></span>

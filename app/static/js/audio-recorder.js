@@ -6,8 +6,22 @@ import { candidateIds, isPermissionError } from "./device-lookup.js";
 
 const RESUME_TIMEOUT_MS = 1500;
 
+// The browser's echo canceller is the only thing between the translated
+// speech coming out of the speakers and the mic picking it back up, so ask
+// for it explicitly instead of relying on the spec default — a default that
+// is true today in every browser we target, but is not ours to depend on.
+// AGC is off on purpose: it flattens the speaker's dynamics, and the system
+// instruction asks the model to preserve their tone and urgency.
+const AUDIO_PROCESSING = {
+  echoCancellation: true,
+  noiseSuppression: true,
+  autoGainControl: false,
+};
+
 function micConstraints(deviceId) {
-  return { audio: { channelCount: 1, deviceId: { exact: deviceId } } };
+  return {
+    audio: { channelCount: 1, deviceId: { exact: deviceId }, ...AUDIO_PROCESSING },
+  };
 }
 
 /**
@@ -20,7 +34,7 @@ function micConstraints(deviceId) {
  * remaining attempt would fail the same way and the caller should say so.
  */
 async function getMicStream(prefs) {
-  const base = { audio: { channelCount: 1 } };
+  const base = { audio: { channelCount: 1, ...AUDIO_PROCESSING } };
   if (!prefs || !prefs.length) return navigator.mediaDevices.getUserMedia(base);
 
   for (const id of await candidateIds("audioinput", prefs)) {

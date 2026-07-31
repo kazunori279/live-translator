@@ -20,15 +20,11 @@ let micRunning = false;
 let micMuted = false;
 
 const SIMUL_KEY = "live-translator.simul";
-const CONVO_KEY = "live-translator.convo";
 let simulMode = localStorage.getItem(SIMUL_KEY) === "true";
 // Conversation = bidirectional interpreter between the two chosen languages.
-// Mutually exclusive with Simul; if both were persisted, Simul wins.
-let convoMode = localStorage.getItem(CONVO_KEY) === "true";
-if (simulMode && convoMode) {
-  convoMode = false;
-  localStorage.setItem(CONVO_KEY, "false");
-}
+// It is now the only alternative to Simul, so it has no toggle and no stored
+// preference of its own: anything that is not Simul is a conversation.
+let convoMode = !simulMode;
 
 const sourceLangSelect = document.getElementById("sourceLang");
 const targetLangSelect = document.getElementById("targetLang");
@@ -109,28 +105,6 @@ function setupCustomSelect(hiddenInput, trigger, dropdown, defaultCode, language
     if (selected) selected.scrollIntoView({ block: "center" });
   });
 }
-
-// Swap languages
-document.getElementById("swapLangs").addEventListener("click", () => {
-  const srcVal = sourceLangSelect.value;
-  const tgtVal = targetLangSelect.value;
-  const srcTrigger = document.getElementById("sourceLangTrigger");
-  const tgtTrigger = document.getElementById("targetLangTrigger");
-  const srcText = srcTrigger.textContent;
-  const tgtText = tgtTrigger.textContent;
-  sourceLangSelect.value = tgtVal;
-  targetLangSelect.value = srcVal;
-  srcTrigger.textContent = tgtText;
-  tgtTrigger.textContent = srcText;
-  // Update selected states in dropdowns
-  document.getElementById("sourceLangDropdown").querySelectorAll(".custom-select-option").forEach(o => {
-    o.classList.toggle("selected", o.dataset.value === tgtVal);
-  });
-  document.getElementById("targetLangDropdown").querySelectorAll(".custom-select-option").forEach(o => {
-    o.classList.toggle("selected", o.dataset.value === srcVal);
-  });
-  reconnectWithNewLanguage();
-});
 
 // Close dropdowns on outside click
 document.addEventListener("click", () => {
@@ -494,11 +468,7 @@ function reconnectWithNewLanguage() {
     websocket.close();
   }
   messagesDiv.innerHTML = '';
-  const srcName = document.getElementById("sourceLangTrigger").textContent;
-  const tgtName = document.getElementById("targetLangTrigger").textContent;
-  const sep = convoMode ? " ⇄ " : " → ";
-  const modeLabel = simulMode ? " (Simultaneous)" : convoMode ? " (Conversation)" : "";
-  addSystemMessage(`${srcName}${sep}${tgtName}${modeLabel}`);
+  addSystemMessage(sessionDescription());
   connectWebsocket();
 }
 
@@ -561,7 +531,11 @@ function startAudio() {
       return;
     }
     const { src, tgt } = getLanguageNames();
-    addSystemMessage(`Ready for ${src} to ${tgt} translation`);
+    addSystemMessage(
+      simulMode
+        ? `Ready to translate into ${tgt}`
+        : `Ready to interpret between ${src} and ${tgt}`
+    );
     if (pttMode) {
       startAudioButton.disabled = false;
       is_audio = false;
@@ -619,57 +593,37 @@ document.addEventListener("visibilitychange", () => {
 const startAudioButton = document.getElementById("startAudioButton");
 const pttToggle = document.getElementById("pttToggle");
 const simulToggle = document.getElementById("simulToggle");
-const convoToggle = document.getElementById("convoToggle");
 
 simulToggle.checked = simulMode;
-convoToggle.checked = convoMode;
 
 function applySimulUi() {
   const glossaryBtn = document.getElementById("openGlossary");
   const langSelector = document.querySelector(".language-selector");
   const autoDetectLabel = document.getElementById("autoDetectLabel");
   const sourceLangWrapper = document.getElementById("sourceLangWrapper");
-  const swapBtn = document.getElementById("swapLangs");
+  const bidiIcon = document.getElementById("bidiIcon");
   const glossarySimulNote = document.getElementById("glossarySimulNote");
   if (simulMode) {
     sourceLangWrapper.style.display = "none";
-    swapBtn.style.display = "none";
     autoDetectLabel.style.display = "";
     if (glossarySimulNote) glossarySimulNote.style.display = "";
   } else {
     sourceLangWrapper.style.display = "";
-    swapBtn.style.display = "";
     autoDetectLabel.style.display = "none";
     if (glossarySimulNote) glossarySimulNote.style.display = "none";
   }
+  bidiIcon.style.display = simulMode ? "none" : "";
 }
 applySimulUi();
 
 simulToggle.addEventListener("change", () => {
   simulMode = simulToggle.checked;
   localStorage.setItem(SIMUL_KEY, simulMode ? "true" : "false");
-  if (simulMode && convoMode) {
-    // Simul and Conversation are mutually exclusive.
-    convoMode = false;
-    convoToggle.checked = false;
-    localStorage.setItem(CONVO_KEY, "false");
-  }
+  // The two modes are mutually exclusive and there is nothing else to fall
+  // back to, so turning Simul off returns you to a conversation.
+  convoMode = !simulMode;
   rebuildTargetDropdown();
   applySimulUi();
-  reconnectWithNewLanguage();
-});
-
-convoToggle.addEventListener("change", () => {
-  convoMode = convoToggle.checked;
-  localStorage.setItem(CONVO_KEY, convoMode ? "true" : "false");
-  if (convoMode && simulMode) {
-    // Turning on Conversation cancels Simul; restore the two-way language UI.
-    simulMode = false;
-    simulToggle.checked = false;
-    localStorage.setItem(SIMUL_KEY, "false");
-    rebuildTargetDropdown();
-    applySimulUi();
-  }
   reconnectWithNewLanguage();
 });
 
@@ -683,6 +637,20 @@ function getLanguageNames() {
   const src = document.getElementById("sourceLangTrigger").textContent;
   const tgt = document.getElementById("targetLangTrigger").textContent;
   return { src, tgt };
+}
+
+/**
+ * One-line description of what the session about to open will do.
+ *
+ * Simul auto-detects the source language, so naming the source dropdown there
+ * would be a lie — that dropdown is hidden in Simul precisely because its value
+ * is ignored. Conversation goes both ways, so it gets no arrow direction.
+ */
+function sessionDescription() {
+  const { src, tgt } = getLanguageNames();
+  return simulMode
+    ? `Any language → ${tgt} (Simultaneous)`
+    : `${src} ⇄ ${tgt} (Conversation)`;
 }
 
 // The Start button doubles as the microphone mute control once audio is
@@ -1204,12 +1172,37 @@ function onDevicePicked(key, select) {
   else setPriority(key, []);
 }
 
+/**
+ * Record a pick and act on it straight away.
+ *
+ * Persisting alone was not enough: the running pipeline kept reading the old
+ * device until the app was reloaded, so the dropdown looked like it had done
+ * something it had not. `restartRecorder`/`restartPlayer` no-op while audio is
+ * stopped, in which case the next Start reads the same ranking anyway.
+ *
+ * The in-flight latch is shared with the devicechange handler so a plug event
+ * and a manual pick cannot rebuild the same pipeline at the same time.
+ */
+async function applyDevicePick(key, select, restart, noun) {
+  onDevicePicked(key, select);
+  if (deviceSwitchInFlight) return;
+  deviceSwitchInFlight = true;
+  try {
+    await restart();
+  } catch (err) {
+    console.error(`Failed to switch ${noun}:`, err);
+    addSystemMessage(`Could not switch ${noun}.`);
+  } finally {
+    deviceSwitchInFlight = false;
+  }
+}
+
 audioInputSelect.addEventListener("change", () => {
-  onDevicePicked(AUDIO_INPUT_KEY, audioInputSelect);
+  applyDevicePick(AUDIO_INPUT_KEY, audioInputSelect, restartRecorder, "microphone");
 });
 
 audioOutputSelect.addEventListener("change", () => {
-  onDevicePicked(AUDIO_OUTPUT_KEY, audioOutputSelect);
+  applyDevicePick(AUDIO_OUTPUT_KEY, audioOutputSelect, restartPlayer, "speaker");
 });
 
 /** deviceId the granted stream is really reading from ("" if unknown). */
@@ -1243,11 +1236,10 @@ async function restartPlayer() {
   activeOutputDeviceId = sinkId;
 }
 
-document.getElementById("applyAudio").addEventListener("click", async () => {
-  await restartRecorder();
-  await restartPlayer();
+document.getElementById("applyAudio").addEventListener("click", () => {
   audioOverlay.classList.add("hidden");
-  // The voice is baked into the Live session's config, so a new choice only
+  // Devices already switched when they were picked; the voice is all that is
+  // left, and it is baked into the Live session's config, so a new choice only
   // applies once we reconnect.
   if (getVoice() !== activeVoice) reconnectWithNewLanguage();
 });

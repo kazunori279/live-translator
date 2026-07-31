@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -10,6 +11,11 @@ from pathlib import Path
 import websockets
 
 SERVER_URL = "ws://localhost:8001/ws/test-user"
+# Conversation mode is the app's default, so it is what these cases exercise.
+# Set LIVE_TRANSLATOR_MODE=agent to check the one-way path instead; every case
+# feeds source-language audio and expects a target-language translation, so
+# the two modes are scored identically.
+CONVO_MODE = os.environ.get("LIVE_TRANSLATOR_MODE", "convo") != "agent"
 CHUNK_SIZE = 512  # bytes per frame (256 samples * 2 bytes)
 CHUNK_INTERVAL = 0.016  # ~16ms per chunk at 16kHz
 WAIT_FOR_RESPONSE = 15  # seconds to wait after sending audio
@@ -90,6 +96,8 @@ async def run_single_test(
     print(f"Audio: {len(pcm_data)} bytes ({len(pcm_data) / 32000:.1f}s)")
 
     url = f"{SERVER_URL}/{session_id}?source={source}&target={target}"
+    if CONVO_MODE:
+        url += "&convo=true"
 
     input_transcriptions = []
     output_transcriptions = []

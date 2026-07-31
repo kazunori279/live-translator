@@ -670,6 +670,18 @@ async def main():
     parser.add_argument("--source", default="en", help="Source language code")
     parser.add_argument("--target", default="ja", help="Target language code")
     parser.add_argument(
+        "--mode",
+        choices=("convo", "agent"),
+        default="convo",
+        help=(
+            "convo: bidirectional interpreter, the app's default mode. "
+            "agent: one-way source->target. Both are driven with source-language "
+            "audio and scored against a target-language translation, so the only "
+            "difference is whether the model is told the direction or has to "
+            "detect it (default: convo)"
+        ),
+    )
+    parser.add_argument(
         "--log",
         default=None,
         help="Path to JSONL log file for per-iteration metrics (default: auto-generated)",
@@ -677,6 +689,8 @@ async def main():
     args = parser.parse_args()
 
     ws_url = f"{args.url}/ws/soak-test/soak-session-001?source={args.source}&target={args.target}"
+    if args.mode == "convo":
+        ws_url += "&convo=true"
 
     genai_client = genai.Client(api_key=os.environ["GOOGLE_API_KEY"])
     tts_client = texttospeech.TextToSpeechClient()
@@ -689,7 +703,10 @@ async def main():
     start = time.monotonic()
     glossary_cycle = iter(range(len(TEST_GLOSSARY)))
 
-    print(f"[{stamp()}] Starting soak test: {args.source} -> {args.target}, duration={args.duration}s")
+    print(
+        f"[{stamp()}] Starting soak test: {args.source} -> {args.target}, "
+        f"mode={args.mode}, duration={args.duration}s"
+    )
     print(f"[{stamp()}] Glossary: {len(TEST_GLOSSARY)} entries")
     print(f"[{stamp()}] Logging metrics to {log_path}")
     print(f"[{stamp()}] Connecting to {ws_url}")
@@ -736,6 +753,7 @@ async def main():
 
         log_file.write(json.dumps({
             "timestamp": datetime.now(timezone.utc).isoformat(),
+            "mode": args.mode,
             "iteration": result.index,
             "original": result.original,
             "input_transcription": result.input_transcription,

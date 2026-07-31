@@ -1,6 +1,6 @@
 # Live Translator
 
-Real-time audio translation powered by Gemini Live API. Speak in any language and hear the translation immediately. Three modes: agent mode (97 languages, glossary), simultaneous translation mode (78 languages, auto-detect source language), and conversation mode (a bidirectional interpreter between two languages, so two people can talk to each other).
+Real-time audio translation powered by Gemini Live API. Speak in any language and hear the translation immediately. The default is **conversation mode**: a bidirectional interpreter between the two selected languages (97 languages, glossary), so two people can talk to each other. Toggling **Simul** switches to simultaneous translation mode (78 languages, auto-detect source language, one-way into the target). A one-way agent mode also exists on the server and is reachable from the test harness, but is no longer exposed in the UI.
 
 ![Demo](demo.gif)
 
@@ -36,31 +36,33 @@ Open http://localhost:8000.
 
 ### Basic Usage
 
-1. Select source and target languages from the bottom bar
+1. Select the two conversation languages from the bottom bar
 2. Click **Start** to begin continuous translation (always-on mode)
 3. Speak into your microphone — translations appear as text bubbles and play as audio
 
-### Simultaneous Translation
+Once audio is running, the same button becomes **Mute**/**Unmute**. Muting stops sending frames but keeps the microphone stream open, so unmuting is instant and never re-prompts for permission.
 
-Toggle **Simul** to switch to simultaneous translation mode. This uses the `gemini-3.5-live-translate-preview` model which auto-detects the source language — the source language selector is hidden and only a target language dropdown is shown.
+### Conversation (default)
 
-Differences from agent mode:
-- **Auto-detect**: no need to select a source language
-- **78 languages** supported (vs 97 in agent mode)
-- **No glossary**: custom term pinning is not available
-- **Idle timer**: since the model doesn't send turn-complete signals, transcription bubbles are finalized after 2 seconds of silence
-
-Language selections are preserved when switching modes — codes are mapped automatically between the two language sets (e.g. `zh` ↔ `zh-Hans`).
-
-### Conversation
-
-Toggle **Conversation** to turn the one-way translator into a **bidirectional interpreter** between the two selected languages, so two people can hold a live conversation. The model auto-detects which of the two languages each utterance is spoken in and speaks the translation in the *other* one — e.g. with English + Japanese selected, English speech is rendered in Japanese and Japanese speech in English, in the same session.
+The app runs as a **bidirectional interpreter** between the two selected languages, so two people can hold a live conversation. The model auto-detects which of the two languages each utterance is spoken in and speaks the translation in the *other* one — e.g. with English + Japanese selected, English speech is rendered in Japanese and Japanese speech in English, in the same session. The `⇄` between the two language dropdowns is a label, not a button: there is no direction to swap.
 
 Details:
 - Both language selectors stay visible (unlike Simul); pick the two conversation languages.
 - Uses the agent model (`gemini-3.1-flash-live-preview`) with a bidirectional interpreter system instruction. The **glossary applies in either direction**.
 - A single output voice speaks both directions (the Live session has one voice config).
-- **Mutually exclusive with Simul** — turning one on turns the other off.
+- The system instruction includes an echo guard asking the model to ignore its own translated speech if the microphone picks it back up. This is a soft backstop — the browser's echo canceller handles the same-device case, and nothing handles a PA system. **Use headphones when you can.**
+
+### Simultaneous Translation
+
+Toggle **Simul** to switch to simultaneous translation mode. This uses the `gemini-3.5-live-translate-preview` model which auto-detects the source language — the source language selector is hidden and only a target language dropdown is shown. Translation is one-way, into the selected target language.
+
+Differences from conversation mode:
+- **Auto-detect**: no need to select a source language
+- **78 languages** supported (vs 97)
+- **No glossary**: custom term pinning is not available (display replacements still apply)
+- **Idle timer**: since the model doesn't send turn-complete signals, transcription bubbles are finalized after 2 seconds of silence
+
+Turning Simul back off returns you to conversation mode. Language selections are preserved when switching — codes are mapped automatically between the two language sets (e.g. `zh` ↔ `zh-Hans`).
 
 ### Push to Talk
 
@@ -172,9 +174,11 @@ FastAPI bridges one browser WebSocket to a series of Gemini Live API sessions. T
 
 **Agent mode** uses `gemini-3.1-flash-live-preview` via the Gemini API (`generativelanguage.googleapis.com`). The system instruction (built in `app/translator_agent/agent.py`) tells the model to translate only the current utterance and never repeat previous translations. The glossary is embedded as `source → target` pairs with case-insensitive matching.
 
-**Simultaneous translation mode** uses `gemini-3.5-live-translate-preview` with a `TranslationConfig` instead of system instructions. The config specifies `target_language_code` and `echo_target_language=True` (so the model echoes back what it hears in the target language). This model auto-detects the source language and does not support tools or glossary.
+**Simultaneous translation mode** uses `gemini-3.5-live-translate-preview` with a `TranslationConfig` instead of system instructions. The config specifies `target_language_code` and `echo_target_language=False`. This model auto-detects the source language and does not support tools, glossary, or system instructions — so the prompt-level echo guard is unavailable here, and `echo_target_language=False` takes its place: the model stays silent on input that is already in the target language rather than parroting it. That matters because the model's own output is, by construction, in the target language, so with `True` a speaker feeding the microphone produced a self-sustaining feedback loop. The tradeoff is that a human genuinely speaking the target language gets no audio out, which is the desired behaviour for one-way simultaneous translation.
 
-**Conversation mode** reuses the agent model (`gemini-3.1-flash-live-preview`) but with a bidirectional interpreter system instruction (`build_conversation_instruction` in `app/translator_agent/agent.py`): it tells the model to detect which of the two configured languages each utterance is in and reply in the other. The WebSocket carries a `convo=true` query param; the glossary is embedded bidirectionally (`source ↔ target`).
+**Conversation mode** (the UI default) reuses the agent model (`gemini-3.1-flash-live-preview`) but with a bidirectional interpreter system instruction (`build_conversation_instruction` in `app/translator_agent/agent.py`): it tells the model to detect which of the two configured languages each utterance is in and reply in the other. The WebSocket carries a `convo=true` query param; the glossary is embedded bidirectionally (`source ↔ target`). Without that param the server falls back to one-way agent mode (`build_system_instruction`), which the UI no longer requests but the test harness still exercises.
+
+Both system-instruction builders end with an **echo guard** (`_ECHO_GUARD`) asking the model to stay silent when an utterance is its own earlier output coming back through the speakers. It is a hint, not a guarantee: the model has no ground truth for what it emitted, and its false-positive mode is dropping a real utterance.
 
 Audio input is 16 kHz mono PCM; output is 24 kHz PCM (both modes).
 
@@ -320,9 +324,11 @@ uv run python tests/test_long.py --duration 120
 uv run python tests/test_long.py --url wss://YOUR_CLOUD_RUN_URL --duration 3600
 ```
 
-Options: `--url` (WebSocket base URL), `--duration` (seconds), `--source`/`--target` (language pair), `--log` (JSONL output path).
+Options: `--url` (WebSocket base URL), `--duration` (seconds), `--source`/`--target` (language pair), `--mode` (`convo`, the app default, or `agent` for the one-way path), `--log` (JSONL output path).
 
 #### Latest soak test results (1 hour, en → ja, Cloud Run)
+
+Recorded in **agent mode**, before conversation mode became the default and before the echo guard was added to the system instruction. A 150-second convo-mode smoke run scored 9/9 at avg 10.0/10 with 0 errors, but a full-hour convo-mode soak has not been run.
 
 Six GoAways at a ~9-minute cadence, covering all three drain paths: two instant cutovers that replayed unanswered audio (84,992 and 44,032 bytes, delivered 93ms and 83ms after the GoAway), two stalled drains that recovered and had their mirrored replacement discarded, and two silent cutovers between utterances with nothing owed. Every iteration spanning one scored 10/10 at normal latency. The single failure is the last iteration, truncated by the duration limit.
 

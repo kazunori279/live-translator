@@ -171,20 +171,15 @@ h1 {
   white-space: nowrap;
 }
 
-.lang-swap-btn {
-  background: var(--input-bg);
-  border: 1px solid var(--border-color);
-  color: #5f6368;
+/* Sits between the two language dropdowns where a swap button used to be, but
+   is deliberately unstyled as a control: there is nothing to click. */
+.lang-bidi-icon {
+  color: #80868b;
   font-size: 1.1rem;
   padding: 0.2rem 0.5rem;
-  border-radius: 4px;
-  cursor: pointer;
+  border: 1px solid transparent;
   line-height: 1;
-}
-
-.lang-swap-btn:hover {
-  background: #e8eaed;
-  color: #202124;
+  user-select: none;
 }
 
 .header-controls {
@@ -433,9 +428,32 @@ button {
   opacity: 0.6;
 }
 
+/* The icon is a CSS mask rather than markup so the button's label can stay a
+   plain textContent write, which is how every state change here already sets
+   it. The mask is painted in currentColor, so it tracks the button's text. */
 #startAudioButton {
   background-color: #e53935;
   color: white;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  --mic-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5-3c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z'/%3E%3C/svg%3E");
+}
+
+#startAudioButton::before {
+  content: "";
+  flex: none;
+  width: 1.1em;
+  height: 1.1em;
+  background-color: currentColor;
+  -webkit-mask: var(--mic-icon) center / contain no-repeat;
+  mask: var(--mic-icon) center / contain no-repeat;
+}
+
+/* Muted swaps in the struck-through mic. */
+#startAudioButton.muted {
+  --mic-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M19 11h-1.7c0 .74-.16 1.43-.43 2.05l1.23 1.23c.56-.98.9-2.09.9-3.28zm-4.02.17c0-.06.02-.11.02-.17V5c0-1.66-1.34-3-3-3S9 3.34 9 5v.18l5.98 5.99zM4.27 3L3 4.27l6.01 6.01V11c0 1.66 1.33 3 2.99 3 .22 0 .44-.03.65-.08l1.66 1.66c-.71.33-1.5.52-2.31.52-2.76 0-5.3-2.1-5.3-5.1H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c.91-.13 1.77-.45 2.54-.9L19.73 21 21 19.73 4.27 3z'/%3E%3C/svg%3E");
 }
 
 #startAudioButton:hover:not(:disabled) {

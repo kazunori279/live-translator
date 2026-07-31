@@ -305,6 +305,18 @@ def simul_language_code(code: str) -> str:
     return _SIMUL_CODE_MAP.get(code, code)
 
 
+# The translation is played out loud, so a room without headphones can feed it
+# straight back into the mic. Browser AEC catches the same-device case; nothing
+# catches a PA system. This is the soft backstop for what gets through — a
+# hint, not a guarantee, since the model has no ground truth for what it emitted.
+_ECHO_GUARD = (
+    "Your own translated speech is played through speakers, so the microphone "
+    "may pick it up again. If an utterance is your own earlier output coming "
+    "back — your voice, repeating what you just said — ignore it and stay "
+    "silent instead of translating it. Only translate a human speaker."
+)
+
+
 def build_system_instruction(
     source_lang: str = "en",
     target_lang: str = "ja",
@@ -323,7 +335,8 @@ def build_system_instruction(
         f"and urgency. "
         f"Translate only the current utterance. Do not repeat, reference, or "
         f"prepend translations from previous turns. Each spoken segment should "
-        f"produce exactly one translation of that segment and nothing else."
+        f"produce exactly one translation of that segment and nothing else. "
+        + _ECHO_GUARD
         + _glossary_section(entries)
     )
 
@@ -367,6 +380,7 @@ def build_conversation_instruction(
         f"Translate only the current utterance. Do not repeat, reference, or prepend "
         f"translations from previous turns. Each spoken segment should produce exactly "
         f"one translation of that segment and nothing else. Never translate into the "
-        f"same language the utterance was spoken in, and never echo the original."
+        f"same language the utterance was spoken in, and never echo the original. "
+        + _ECHO_GUARD
         + _glossary_section_bidi(entries)
     )
