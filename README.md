@@ -36,51 +36,53 @@ Open http://localhost:8000.
 
 ### Basic Usage
 
-1. Select the two conversation languages from the bottom bar
-2. Click **Start** to begin continuous translation (always-on mode)
-3. Speak into your microphone — translations appear as text bubbles and play as audio
+1. Pick your two languages at the bottom of the screen.
+2. Click **Start**, and allow microphone access when the browser asks.
+3. Talk. What you said appears as text, and the translation is spoken aloud.
 
-Once audio is running, the same button becomes **Mute**/**Unmute**. Muting stops sending frames but keeps the microphone stream open, so unmuting is instant and never re-prompts for permission.
+Once you are running, **Start** turns into **Mute**. Muting stops sending your voice but keeps the microphone ready, so unmuting is instant and the browser won't ask for permission again.
 
 ### Conversation (default)
 
-The app runs as a **bidirectional interpreter** between the two selected languages, so two people can hold a live conversation. The model auto-detects which of the two languages each utterance is spoken in and speaks the translation in the *other* one — e.g. with English + Japanese selected, English speech is rendered in Japanese and Japanese speech in English, in the same session. The `⇄` between the two language dropdowns is a label, not a button: there is no direction to swap.
+Two people, two languages, one session. Say something in either of the languages you picked and the app speaks it in the other one. With English and Japanese selected, English comes out as Japanese and Japanese comes out as English — you never tell it who is talking, it works that out from what it hears.
 
-Details:
-- Both language selectors stay visible (unlike Simul); pick the two conversation languages.
-- Uses the agent model (`gemini-3.1-flash-live-preview`) with a bidirectional interpreter system instruction. The **glossary applies in either direction**.
-- A single output voice speaks both directions (the Live session has one voice config).
-- The system instruction includes an echo guard asking the model to ignore its own translated speech if the microphone picks it back up. This is a soft backstop — the browser's echo canceller handles the same-device case, and nothing handles a PA system. **Use headphones when you can.**
+Good for a two-way meeting, an interview, or a conversation at a booth.
+
+- Both language dropdowns stay visible — choose the pair you want to interpret between.
+- Your glossary applies in both directions.
+- One voice speaks both sides of the conversation.
 
 ### Simultaneous Translation
 
-Toggle **Simul** to switch to simultaneous translation mode. This uses the `gemini-3.5-live-translate-preview` model which auto-detects the source language — the source language selector is hidden and only a target language dropdown is shown. Translation is one-way, into the selected target language.
+Switch on **Simul** for one-way translation: whatever the microphone hears, in whatever language, comes out in the single language you choose. There is no source language to set, so that dropdown disappears.
 
-Differences from conversation mode:
-- **Auto-detect**: no need to select a source language
-- **78 languages** supported (vs 97)
-- **No glossary**: custom term pinning is not available (display replacements still apply)
-- **Idle timer**: since the model doesn't send turn-complete signals, transcription bubbles are finalized after 2 seconds of silence
+Good for a talk, a lecture, or a presentation — one speaker, an audience that needs one language.
 
-Turning Simul back off returns you to conversation mode. Language selections are preserved when switching — codes are mapped automatically between the two language sets (e.g. `zh` ↔ `zh-Hans`).
+Compared with conversation mode:
+- **Nothing to configure but the output language** — it works out what is being spoken.
+- **78 languages** to choose from, rather than 97.
+- **The glossary doesn't steer the translation**, though your on-screen term substitutions still apply.
+- **Captions settle a moment later.** This mode doesn't signal where a sentence ends, so text is finalized after about two seconds of quiet.
+
+Switching **Simul** back off returns you to conversation mode, and your language choices carry over.
 
 ### Push to Talk
+
+Reach for this when the app is hearing more than you want it to — a noisy room or a busy booth, other conversations nearby, or [echo and feedback](#echo-and-feedback) from your speakers. The microphone only listens while you hold the button down, so background noise and the app's own voice never reach it between your turns.
 
 Toggle **Push to Talk** on the right to switch from always-on to manual control. Hold the **Hold to Talk** button (or press spacebar) to transmit, release to stop.
 
 ### Voice & Audio Settings
 
-Click **Voice & Audio** in the header to pick the microphone, the speaker, and the **translation voice** — one of the 30 prebuilt Gemini Live voices, listed with its tone (e.g. `Kore — Firm`, `Sulafat — Warm`). All three choices are saved in your browser.
+Click **Voice & Audio** in the header to choose your microphone, your speaker, and the **voice** that reads the translation — 30 to pick from, each labelled with its character (`Kore — Firm`, `Sulafat — Warm`). All three are remembered by your browser.
 
-The voice is part of the Live session's config, so switching it reconnects the session (the transcript is cleared). It applies to all three modes. Unknown voice names sent by a client are rejected server-side and fall back to the default (`Puck`), since the Live API refuses to connect on an unrecognised voice.
+Microphone and speaker changes take effect straight away. Changing the voice restarts the session, which clears the transcript.
 
-Microphone and speaker choices build a **priority list** rather than a single setting. Each device you pick moves to the top of its list (up to 10 remembered), and the app always uses the highest-ranked device that is actually attached. Whenever the attached set changes — a headset plugged in, a dock removed — the list is re-evaluated and the pipeline switches to the new best device mid-session, so losing the mic in use drops to your next favourite instead of the system default. Choosing **System Default** is treated as a deliberate opt-out and clears the list.
-
-Each entry stores **both `deviceId` and label**. A `deviceId` is perishable — the browser re-salts it when site permissions are cleared, and some devices come back with a new one after a replug — so if the saved id no longer resolves, the device is matched by name and the stored id is repaired in place, keeping its rank. Entries for absent devices are kept, so plugging one back in reclaims its position.
+The app remembers every microphone and speaker you have chosen, in order of preference, and always uses the best one currently plugged in. Unplug your headset mid-session and it drops to your next favourite rather than to whatever the system picks. Plug it back in and it takes over again. Choosing **System Default** clears the list — that is read as "stop managing this for me".
 
 ### Glossary
 
-Click **Glossary** in the header to pin specific terms to fixed translations. The glossary is per-browser (stored in `localStorage`) and sent to the server on each new session.
+Click **Glossary** in the header to pin specific terms to fixed translations — product names, jargon, anything the model tends to get creative with. Your glossary is saved in your browser and applies only to you.
 
 Upload a UTF-8 CSV with `source,target[,transcription]` per line:
 
@@ -90,37 +92,55 @@ Cloud Run,クラウドラン,Cloud Run
 Vertex AI,バーテックスエーアイ,Vertex AI
 ```
 
-The optional third column is a display override — the model pronounces the `target` form, but the on-screen transcript shows the `transcription` form. Useful for proper nouns where you want phonetic audio but a Latin display label.
+The third column is optional and only changes what you see: the app *says* the second form and *shows* the third. That is useful for product names where you want a phonetic pronunciation but a normal spelling on screen.
 
-Changes take effect on the next session (click **Start** again, or change languages).
-
-#### Changing the default glossary
-
-Edit `app/dict.csv` and redeploy. Browsers with a cached glossary keep using it until the user clicks **Reset to defaults** in the modal.
+Changes take effect next time the session starts — click **Start** again, or change a language.
 
 ### Caption Overlay
 
-Overlay translated subtitles on top of any window — useful for presentations at onsite events or screen sharing via Google Meet. Click **Caption** in the header to open the caption page, or navigate to `/caption` manually.
+Put translated subtitles on top of any window — useful for presenting at an event, or for screen sharing on Google Meet. Click **Caption** in the header, or go to `/caption`.
 
 ![Caption Overlay](caption.png)
 
 1. Open the main app in Chrome and click **Start** to begin translating
 2. Click **Caption** in the header — a new window opens with a "Select Window" button
-3. Click **Select Window** and pick the window to mirror (e.g. your slides, Keynote, or any app)
-4. The selected window's content streams into the caption page with translated subtitles at the bottom
-5. Click the **⛶ Fullscreen** button in the top-right (or press **F** / double-click) to fill the screen
+3. Click **Select Window** and pick the window to mirror (your slides, Keynote, any app)
+4. That window's content appears in the caption page, with translated subtitles along the bottom
+5. Click **⛶ Fullscreen** in the top-right (or press **F**, or double-click) to fill the screen
 6. Share this caption window on Google Meet — participants see your slides with live subtitles
 
-Fullscreen needs its own click, separate from *Select Window*: `requestFullscreen()` consumes the transient user activation that `getDisplayMedia()` also requires, and the window picker preempts an in-flight fullscreen transition. Hence the dedicated button, which appears once mirroring starts and fades out after 4 seconds so it stays off your slides — move the mouse to bring it back. **Esc** exits, as does stopping the screen share.
+Fullscreen is a separate click from *Select Window* on purpose; the two can't be combined for browser security reasons. The button appears once mirroring starts and fades after 4 seconds so it stays off your slides — move the mouse to bring it back. **Esc** exits, as does stopping the screen share.
 
-The caption page uses the [Screen Capture API](https://developer.mozilla.org/en-US/docs/Web/API/Screen_Capture_API) to mirror the target window and the [BroadcastChannel API](https://developer.mozilla.org/en-US/docs/Web/API/BroadcastChannel) to receive transcription from the main page, so both pages must run in the same browser. No OBS or third-party tools needed.
+Both windows have to be in the same browser, and it must be Chrome. No OBS or other tools are needed.
 
 ### Connection States
 
-The status indicator in the top-right corner shows:
-- **Yellow dot / Connecting...** — WebSocket connecting
-- **Green dot / Connected** — ready to translate
-- **Red dot / Disconnected** — connection lost, auto-reconnects in 5s
+The dot in the top-right corner shows:
+- **Yellow / Connecting…** — establishing the connection
+- **Green / Connected** — ready to translate
+- **Red / Disconnected** — connection lost; it retries automatically after 5 seconds
+
+### Echo and Feedback
+
+**If you are on a phone, tablet, or laptop using its own built-in microphone and speakers, you can skip this section.** Your device cancels its own echo, and the app leaves that switched on. The same goes for headphones or an ordinary headset.
+
+You may run into echo if you are doing any of the following:
+
+- Sending sound to a speaker other than **System Default** in Voice & Audio
+- Using external speakers, a PA system, or a mixing desk
+- Playing the translation on one device and picking it up with another
+- Working in a large or echoey room, or with a distant speaker
+
+In those setups the translation comes out of the speakers, the microphone hears it, and the app treats its own voice as something new to translate — so it starts talking to itself. It won't build into a squeal the way a PA system does. It keeps going at normal volume, one full sentence at a time, which is harder to notice and harder to stop.
+
+The app pushes back on this in several ways ([how](#echo-handling)), but they only go so far. If you hear an echo, try these in order:
+
+1. **Put on headphones.** This breaks the loop at the source and always works.
+2. **Set the speaker back to System Default** in Voice & Audio. Sending audio anywhere else switches off the browser's echo cancellation — this is the most common cause of bad echo.
+3. **Turn the volume down**, or move the microphone further from the speakers.
+4. **Mute** while the translation is playing.
+
+Playing the translation through a PA system, a mixing desk, or a second computer defeats echo cancellation completely, because the sound never goes through this browser. In those setups headphones or a close-up microphone aren't optional.
 
 ---
 
@@ -174,13 +194,48 @@ FastAPI bridges one browser WebSocket to a series of Gemini Live API sessions. T
 
 **Agent mode** uses `gemini-3.1-flash-live-preview` via the Gemini API (`generativelanguage.googleapis.com`). The system instruction (built in `app/translator_agent/agent.py`) tells the model to translate only the current utterance and never repeat previous translations. The glossary is embedded as `source → target` pairs with case-insensitive matching.
 
-**Simultaneous translation mode** uses `gemini-3.5-live-translate-preview` with a `TranslationConfig` instead of system instructions. The config specifies `target_language_code` and `echo_target_language=False`. This model auto-detects the source language and does not support tools, glossary, or system instructions — so the prompt-level echo guard is unavailable here, and `echo_target_language=False` takes its place: the model stays silent on input that is already in the target language rather than parroting it. That matters because the model's own output is, by construction, in the target language, so with `True` a speaker feeding the microphone produced a self-sustaining feedback loop. The tradeoff is that a human genuinely speaking the target language gets no audio out, which is the desired behaviour for one-way simultaneous translation.
+**Simultaneous translation mode** uses `gemini-3.5-live-translate-preview` with a `TranslationConfig` instead of system instructions. The config specifies `target_language_code` and `echo_target_language=False` (see [Echo Handling](#echo-handling)). This model auto-detects the source language and does not support tools, glossary, or system instructions.
 
 **Conversation mode** (the UI default) reuses the agent model (`gemini-3.1-flash-live-preview`) but with a bidirectional interpreter system instruction (`build_conversation_instruction` in `app/translator_agent/agent.py`): it tells the model to detect which of the two configured languages each utterance is in and reply in the other. The WebSocket carries a `convo=true` query param; the glossary is embedded bidirectionally (`source ↔ target`). Without that param the server falls back to one-way agent mode (`build_system_instruction`), which the UI no longer requests but the test harness still exercises.
 
-Both system-instruction builders end with an **echo guard** (`_ECHO_GUARD`) asking the model to stay silent when an utterance is its own earlier output coming back through the speakers. It is a hint, not a guarantee: the model has no ground truth for what it emitted, and its false-positive mode is dropping a real utterance.
-
 Audio input is 16 kHz mono PCM; output is 24 kHz PCM (both modes).
+
+### Echo Handling
+
+Translated speech is played out loud, so any setup where the speakers reach the microphone closes a loop. It is worse than ordinary PA howl in one respect: each round trip is a fresh, fully-formed sentence rather than a resonant frequency, so it needs no gain margin to sustain and can run indefinitely at conversational volume. Three defences act in sequence.
+
+**1. Browser echo cancellation (AEC).** `app/static/js/audio-recorder.js` requests `echoCancellation: true` and `noiseSuppression: true` explicitly rather than relying on the spec default, which is `true` in every browser targeted today but is not ours to depend on. AEC runs inside the browser's input-processing stage, before `createMediaStreamSource` and before the app sees a sample: it knows what was sent to the output device and subtracts that from the microphone signal. `autoGainControl` is deliberately **off** — it flattens the speaker's dynamics, and the system instruction asks the model to preserve tone and urgency.
+
+**2. Simul mode — `echo_target_language=False`.** The translation model accepts no system instruction, so a prompt-level guard is unavailable there; this config flag is the only echo control it has. It tells the model to stay silent on input already in the target language. That matters because the model's own output is, by construction, in the target language — with `True` the model parroted its own echo straight back out, giving a loop with gain ≈ 1 and no natural decay. The tradeoff is that a human genuinely speaking the target language gets no audio out, which is the desired behaviour for one-way translation anyway. Google's own docs also note that `True` introduces artifacts from background noise and music.
+
+**3. Conversation and agent modes — `_ECHO_GUARD`.** Both system-instruction builders in `app/translator_agent/agent.py` end with a paragraph asking the model to stay silent when an utterance is its own earlier output coming back. This is a hint, not a rule: the model has no ground truth for what it emitted, its false-positive mode silently drops a real utterance, and it cannot reliably break a loop already in progress.
+
+**Where AEC stops working.** These are the setups that echo badly:
+
+- **Output routed to a non-default device.** Picking a speaker other than the system default calls `setSinkId`, but the canceller's reference signal is tied to the default output. It ends up subtracting audio nobody is playing, so cancellation is effectively off. This is the most common cause of heavy echo here.
+- **A PA system, external mixer, or second machine playing the audio.** The sound never passes through this browser's output path, so there is no reference signal to subtract. Nothing in the stack can help.
+- **Acoustic delay beyond the filter tail.** AEC models a finite tail, typically ~100–250 ms. A large room, a distant speaker, or a Bluetooth output whose latency exceeds that puts the echo outside the window the canceller can match.
+- **Double-talk.** When someone speaks over the playback, cancellers throttle back to avoid chewing up the near-end voice, and more echo leaks through.
+
+### Audio Devices and Voices
+
+Microphone and speaker choices build a **priority list** rather than a single setting, stored in `localStorage` under `live-translator.audio.inputPriority` / `outputPriority`. Each device picked moves to the top of its list (up to 10 remembered), and the app uses the highest-ranked device actually attached. On `devicechange` the list is re-evaluated and the running pipeline switches mid-session, so losing the mic in use drops to the next favourite instead of the system default. Picking a device also restarts the recorder or player immediately — persisting alone left the pipeline reading the old device until a reload. Choosing **System Default** is a deliberate opt-out and clears the list.
+
+Each entry stores **both `deviceId` and label**. A `deviceId` is perishable — the browser re-salts it when site permissions are cleared, and some devices return with a new one after a replug — so if the saved id no longer resolves, the device is matched by name and the stored id is repaired in place, keeping its rank. Entries for absent devices are retained, so plugging one back in reclaims its position.
+
+The voice is part of the Live session's config, so changing it requires a reconnect (which clears the transcript); microphone and speaker changes do not. Unknown voice names sent by a client are rejected server-side and fall back to `Puck`, since the Live API refuses to connect on an unrecognised voice.
+
+Language selections survive a mode switch: codes are mapped between the two language sets in both directions (e.g. `zh` ↔ `zh-Hans`, `iw` ↔ `he`, `pt` ↔ `pt-BR`).
+
+### Caption Overlay Internals
+
+The caption page uses the [Screen Capture API](https://developer.mozilla.org/en-US/docs/Web/API/Screen_Capture_API) to mirror the target window and the [BroadcastChannel API](https://developer.mozilla.org/en-US/docs/Web/API/BroadcastChannel) to receive transcription from the main page, so both pages must run in the same browser. No OBS or third-party tools needed.
+
+Fullscreen needs its own click, separate from *Select Window*: `requestFullscreen()` consumes the transient user activation that `getDisplayMedia()` also requires, and the window picker preempts an in-flight fullscreen transition. Hence the dedicated button, which appears once mirroring starts and fades out after 4 seconds.
+
+### Changing the Default Glossary
+
+Edit `app/dict.csv` and redeploy. The glossary is per-browser (`localStorage`) and sent to the server on each new session, so browsers with a cached glossary keep using it until the user clicks **Reset to defaults** in the modal.
 
 ### GoAway Handling
 
