@@ -353,15 +353,82 @@ gcloud run deploy live-translation \
   --timeout 3600 \
   --min-instances 1 \
   --max-instances 1 \
-  --set-env-vars "GOOGLE_API_KEY=${GOOGLE_API_KEY}"
+  --set-env-vars "GOOGLE_API_KEY=${GOOGLE_API_KEY},LOG_LEVEL=INFO"
 ```
 
 Key flags:
+- `LOG_LEVEL=INFO` — the app defaults to `DEBUG`, which is useful locally but makes the `websockets` client log the whole Live API handshake, `x-goog-api-key` header included. On Cloud Run that goes to Cloud Logging, so deployments turn it down.
 - `--timeout 3600` — allows hour-long WebSocket conversations (upstream Live sessions cycle internally every ~15 min)
 - `--min-instances 1` — avoids cold start latency
 - `--max-instances 1` — session resumption handles are stored in-memory; multi-replica requires a shared store (e.g. Redis)
 
 ## Testing
+
+### E2E Test
+
+`tests/test_e2e.py` checks that each mode does its own distinctive job, rather than just that something came back. It speaks into a session with macOS `say`, streams the audio over the WebSocket, and judges the reply.
+
+The cases that matter:
+
+- **Conversation** interprets in *both* directions — one case speaks English and expects Japanese, one speaks Japanese and expects English, and one does both inside a single session.
+- **Simultaneous** translates one way into the target, and stays silent when the input is already in the target language. That silence case guards [`echo_target_language=False`](#echo-handling).
+- **Agent** translates one way, source to target. Not reachable from the UI, still served.
+- **Coverage** runs the remaining language pairs through the default mode.
+
+Direction is verified by writing system (kana, hangul, Latin, CJK-without-kana), so a mode that translated the wrong way would fail rather than pass on "some text arrived".
+
+Audio is judged by level and duration, not by frame count. A model declining to speak still streams frames — they are just digital silence, and the stream occasionally carries a lone blip above the noise floor. So "did it speak" means at least three frames above RMS 50 on a 32768 scale; measured utterances ran 8–16 such frames, and quiet streams 0–1.
+
+```bash
+# every case, against a local server
+uv run python tests/test_e2e.py
+
+# one mode, or one case
+uv run python tests/test_e2e.py --mode simul
+uv run python tests/test_e2e.py --match "both ways"
+
+# one ad-hoc utterance
+uv run python tests/test_e2e.py --say en ja "Hello, how are you?"
+```
+
+Options: `--url` (WebSocket base URL, default `ws://localhost:8000`), `--mode` (`convo`, `simul`, or `agent`), `--match` (substring of a case description), `--say SOURCE TARGET TEXT`.
+
+Requires macOS (`say`) and `ffmpeg`.
+
+#### Latest E2E results (local server)
+
+```
+Test                                         Mode    Status Why
+------------------------------------------------------------------------------
+Conversation: forward (en spoken)            convo   PASS   got ja output
+Conversation: reverse (ja spoken)            convo   PASS   got en output
+Conversation: both ways in one session       convo   PASS   got ja+en output
+Simul: translates into the target            simul   PASS   got ja output
+Simul: silent on target-language input       simul   PASS   stayed silent, as expected
+Agent: one-way source to target              agent   PASS   got ja output
+Coverage: English to Spanish                 convo   PASS   got es output
+Coverage: English to French                  convo   PASS   got fr output
+Coverage: English to Korean                  convo   PASS   got ko output
+Coverage: English to Chinese                 convo   PASS   got zh output
+
+10/10 tests passed
+```
+
+The two-way case is the one worth reading the transcript for: "Good morning. How was your trip?" came back as 「おはようございます。旅はどうでしたか?」, and the Japanese reply 「とても楽しかったです。ありがとうございます。」 came back as "It was wonderful, thank you!" — both directions inside one session.
+
+### Glossary Test
+
+`tests/test_glossary.py` replays recorded and synthetic transcription fragment sequences through `_TranscriptRewriter` and asserts the text the browser ends up with. It is offline — no server, no API key, no audio — so it runs in under a second.
+
+The cases cover a term split three ways with no `finished` message (captured from a live run), a term split one character at a time, two terms split in one sentence, a `finished` message superseding the accumulated partials, and a held tail that never becomes a term and so must be released rather than swallowed. The last case is run twice, once with `turnComplete` and once without, because simul never sends one.
+
+```bash
+uv run python tests/test_glossary.py
+```
+
+```
+8/8 passed
+```
 
 ### Soak Test
 
@@ -379,11 +446,89 @@ uv run python tests/test_long.py --duration 120
 uv run python tests/test_long.py --url wss://YOUR_CLOUD_RUN_URL --duration 3600
 ```
 
-Options: `--url` (WebSocket base URL), `--duration` (seconds), `--source`/`--target` (language pair), `--mode` (`convo`, the app default, or `agent` for the one-way path), `--log` (JSONL output path).
+Options: `--url` (WebSocket base URL), `--duration` (seconds), `--source`/`--target` (language pair), `--mode` (`convo`, the app default; `simul`; or `agent` for the one-way path), `--log` (JSONL output path).
 
-#### Latest soak test results (1 hour, en → ja, Cloud Run)
+All three modes are driven with source-language audio and scored against a target-language translation. Simul is measured slightly differently: it never sends `turnComplete`, so an iteration is considered finished once transcription has been quiet for two seconds — the same rule the browser UI uses to close a caption bubble. The latency figure is back-dated to the last transcription so it stays comparable across modes. Idle is judged on transcription rather than on frames because simul keeps streaming silent audio after it stops speaking.
 
-Recorded in **agent mode**, before conversation mode became the default and before the echo guard was added to the system instruction. A 150-second convo-mode smoke run scored 9/9 at avg 10.0/10 with 0 errors, but a full-hour convo-mode soak has not been run.
+#### Simul smoke results (90s, en → ja, local server)
+
+Short run recorded when simul support was added, alongside a convo-mode control on the same server.
+
+```
+simul  Duration: 102s | Iterations: 6 | Passed: 6/6 (100.0%) | Avg score: 10.0/10 | Errors: 0
+       Turn Complete (speech-end to full translation), n=6
+       min=0.17  avg=0.84  p50=0.87  p90=1.44  max=1.44
+
+convo  Duration:  70s | Iterations: 5 | Passed: 5/5 (100.0%) | Avg score: 10.0/10 | Errors: 0
+       Turn Complete, n=5
+       min=4.85  avg=5.48  p50=5.49  p90=5.98  max=5.98
+```
+
+Simul's latency is far lower because it emits translation while the speaker is still talking, so first response lands at 0.00s and the tail is short. Convo waits for the turn to end before answering. The two numbers measure different things and should not be read as one mode being six times faster at the same job.
+
+Glossary display replacement fired in both modes. It used to fire only about half the time — an earlier convo run found the term in 21 of 40 glossary iterations, and historical agent-mode runs scored 62% and 55% — because the server replaced inside each streaming transcription fragment while the browser reassembled them afterwards, so any term split across a boundary was missed. Gemini splits aggressively (`クバネティス` was observed arriving as `をク` + `バネティ` + `スに`) and most turns carry no `finished` message to fall back on. `_TranscriptRewriter` now buffers across fragment boundaries; see the hour-long runs below for the result.
+
+These runs are too short to say anything about session stability; the hour-long runs below are the ones that cover GoAway handling.
+
+#### Latest soak test results (1 hour each, en → ja, convo and simul in parallel)
+
+Both modes soaked simultaneously against one local server, so they shared a process and an API key while each held its own Live session. Run after the fragment-boundary fix to `_TranscriptRewriter`.
+
+```
+convo  Duration: 3612s | Iterations: 204 | Passed: 203/204 (99.5%) | Avg score: 9.9/10 | Errors: 0
+simul  Duration: 3609s | Iterations: 229 | Passed: 216/229 (94.3%) | Avg score: 9.3/10 | Errors: 0
+```
+
+Thirteen GoAways across both sessions at a ~9-minute cadence, all with `time_left=50s`, every one cutting over without an error or a failed iteration.
+
+Latency, unchanged from earlier runs and still measuring different things per mode — convo answers after the turn ends, simul answers while the speaker is still talking:
+
+```
+       Turn Complete (speech-end to full translation)
+convo  n=204  min=0.65  avg=5.59  p50=5.60  p90=6.71  p99=8.45  max=11.02
+simul  n=229  min=0.00  avg=0.51  p50=0.44  p90=1.15  p99=1.99  max=2.11
+
+       First Response
+convo  n=204  min=0.00  avg=0.02  p50=0.00  p90=0.00  p99=0.38  max=1.95
+simul  n=229  all 0.00
+```
+
+Glossary display replacement, the measure the fix targeted:
+
+```
+convo  59/68 found (87%)   — was 52% on the same test before the fix
+simul  55/76 found (72%)
+```
+
+None of the remaining convo misses are fragment splits. They are the harness scoring a hit it was never going to get:
+
+- **Homographs.** The generated sentence uses the everyday word, not the technical term, so there is no term to replace — `Swift` → 素早い鳥, `Flutter` → 蝶が羽ばたく, `Dart` → ダーツ, `transformer` → 電線のトランス.
+- **Punctuation variants.** `Vue.js` came back as `Vuejs`, `Node.js` as `Node js`, so the literal target string does not match.
+- **Already correct.** `Visual Studio Code` was emitted in Latin script verbatim, which is the desired display; the check still counts it a miss.
+
+Simul's extra misses are a separate, real limitation: simul takes no system instruction, so nothing steers terminology, and the model produces its own readings — `Gemini` → 双子座, `DNS` → DNA, `RabbitMQ` → ウサギMQ, `GraphQL` → グラフQL, `Anthos` → アンソ. Display replacement cannot recover those because the text never contains the expected target.
+
+This run also surfaced the meta-prefix leak fixed below: 8 of 204 convo iterations prepended `(detected language: English)` to the caption.
+
+#### Meta-prefix fix (1 hour, en → ja, convo, local server)
+
+The conversation instruction used to read "first detect which of the two languages it is spoken in, then speak the translation in the OTHER language". Phrased as a two-step procedure, the model sometimes performed step one out loud, and in the worst cases the announcement displaced the opening words of the translation (`detected language: Englishなプロセスを通じて…`, scored 5/10). It clustered rather than scattering — two consecutive bursts, both late in a session's ~9-minute life, one of them carrying across a GoAway into the replacement session.
+
+The instruction now states the mapping without narrating a procedure, and forbids the announcement explicitly: "Work out which silently. Everything you say is the translation itself and nothing else — never announce, label, or describe what language you heard."
+
+```
+Duration: 3602s | Iterations: 201 | Passed: 200/201 (99.5%) | Avg score: 9.9/10 | Errors: 0
+Meta-prefix leaks: 0/201   (was 8/204)
+Glossary Iteration Score: n=67  min=10.00  avg=10.00
+```
+
+Seven GoAways, all clean. Latency unchanged (turn complete avg 5.59s, p90 6.72s). The E2E suite still passes 7/7 in convo mode, which matters because a rewrite of this instruction could plausibly have broken the bidirectional routing it describes.
+
+Glossary *found rate* read 53/67 (79%) against 59/68 (87%) on the previous run, which is sentence-generation noise rather than a regression: every one of the 14 misses is the harness scoring a hit that was never available. The generator happened to produce more homograph sentences this time — "The **swift** bird darted through the sky", "The astrologer consulted her charts to understand **Gemini's** dual nature", "The architect used a strong **angular** design" — where the everyday word is the correct translation and there is no term to replace. The quality score on those same 67 iterations was a flat 10.00. Treat found-rate as a weak signal; the fragment-boundary behaviour is what `tests/test_glossary.py` pins down deterministically.
+
+#### Historical soak test results (1 hour, en → ja, Cloud Run)
+
+Recorded in **agent mode**, before conversation mode became the default and before the echo guard was added to the system instruction. Kept because it is the only hour-long run against Cloud Run and the only one with a detailed GoAway drain-path breakdown.
 
 Six GoAways at a ~9-minute cadence, covering all three drain paths: two instant cutovers that replayed unanswered audio (84,992 and 44,032 bytes, delivered 93ms and 83ms after the GoAway), two stalled drains that recovered and had their mirrored replacement discarded, and two silent cutovers between utterances with nothing owed. Every iteration spanning one scored 10/10 at normal latency. The single failure is the last iteration, truncated by the duration limit.
 

@@ -39,6 +39,10 @@ CHUNK_SIZE = 512
 CHUNK_INTERVAL = 0.016
 RESPONSE_TIMEOUT = 30
 SILENCE_AFTER_SPEECH = 2.0
+# Simul streams continuously and never sends turnComplete, so there is no turn
+# boundary to wait on. Treat a gap in output as the end of the translation, the
+# same way the browser UI finalizes its bubbles.
+SIMUL_IDLE_FINALIZE = 2.0
 GENAI_MODEL = "gemini-2.5-flash-lite"
 
 TOPICS = [
@@ -347,6 +351,7 @@ async def run_iteration(
     source: str,
     target: str,
     glossary_entry: dict[str, str] | None = None,
+    mode: str = "convo",
 ) -> IterationResult:
     topic = TOPICS[index % len(TOPICS)]
     glossary_term = glossary_entry["source"] if glossary_entry else None
@@ -373,6 +378,11 @@ async def run_iteration(
     turn_complete_at: list[float] = []
     # Set by the stale-frame flush below; read back in the receive loop.
     stale_turn_open = [False]
+    simul = mode == "simul"
+    # Idle detection for simul keys off transcription text, not off frames:
+    # the model keeps streaming silent audio after it stops speaking, so an
+    # any-content timer would never fire. This is what the browser UI does too.
+    last_text_at: list[float] = []
 
     async def receive_responses():
         try:
@@ -391,6 +401,8 @@ async def run_iteration(
                 ot = msg.get("outputTranscription")
                 if ot and ot.get("text"):
                     has_content = True
+                    last_text_at.clear()
+                    last_text_at.append(time.monotonic())
                     if ot.get("finished"):
                         output_transcription_final.append(ot["text"])
                     else:
@@ -468,10 +480,23 @@ async def run_iteration(
         await asyncio.sleep(CHUNK_INTERVAL)
 
     # Wait for response
-    try:
-        await asyncio.wait_for(turn_complete.wait(), timeout=RESPONSE_TIMEOUT)
-    except asyncio.TimeoutError:
-        pass
+    if simul:
+        # No turn boundary is coming. Wait until transcription has been quiet
+        # for SIMUL_IDLE_FINALIZE, then call the translation done and back-date
+        # completion to the last text, so the latency figure stays comparable to
+        # the turnComplete-based one from the other modes.
+        deadline = time.monotonic() + RESPONSE_TIMEOUT
+        while time.monotonic() < deadline:
+            await asyncio.sleep(0.1)
+            if last_text_at and time.monotonic() - last_text_at[0] >= SIMUL_IDLE_FINALIZE:
+                turn_complete_at.append(last_text_at[0])
+                break
+        turn_complete.set()
+    else:
+        try:
+            await asyncio.wait_for(turn_complete.wait(), timeout=RESPONSE_TIMEOUT)
+        except asyncio.TimeoutError:
+            pass
 
     recv_task.cancel()
     try:
@@ -671,14 +696,14 @@ async def main():
     parser.add_argument("--target", default="ja", help="Target language code")
     parser.add_argument(
         "--mode",
-        choices=("convo", "agent"),
+        choices=("convo", "simul", "agent"),
         default="convo",
         help=(
             "convo: bidirectional interpreter, the app's default mode. "
-            "agent: one-way source->target. Both are driven with source-language "
-            "audio and scored against a target-language translation, so the only "
-            "difference is whether the model is told the direction or has to "
-            "detect it (default: convo)"
+            "simul: simultaneous translation, one-way into the target with the "
+            "source auto-detected. agent: one-way source->target. All three are "
+            "driven with source-language audio and scored against a "
+            "target-language translation (default: convo)"
         ),
     )
     parser.add_argument(
@@ -691,6 +716,8 @@ async def main():
     ws_url = f"{args.url}/ws/soak-test/soak-session-001?source={args.source}&target={args.target}"
     if args.mode == "convo":
         ws_url += "&convo=true"
+    elif args.mode == "simul":
+        ws_url += "&simul=true"
 
     genai_client = genai.Client(api_key=os.environ["GOOGLE_API_KEY"])
     tts_client = texttospeech.TextToSpeechClient()
@@ -739,6 +766,7 @@ async def main():
             ws, genai_client, tts_client, stt_client,
             stats.iterations, args.source, args.target,
             glossary_entry=glossary_entry,
+            mode=args.mode,
         )
 
         if result.error and "ws closed" in result.error:

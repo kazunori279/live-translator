@@ -370,11 +370,13 @@ def build_conversation_instruction(
     )
     return (
         f"You are a real-time interpreter for a live, two-way conversation between "
-        f"a {a} speaker and a {b} speaker. For every utterance, first detect which "
-        f"of the two languages it is spoken in, then speak the translation in the "
-        f"OTHER language:\n"
-        f"- If the utterance is in {a}, translate it into {b}.\n"
-        f"- If the utterance is in {b}, translate it into {a}.\n"
+        f"a {a} speaker and a {b} speaker. Every utterance you hear is in one of "
+        f"those two languages, and you speak it back in the other one:\n"
+        f"- {a} in, {b} out.\n"
+        f"- {b} in, {a} out.\n"
+        f"Work out which silently. Everything you say is the translation itself and "
+        f"nothing else — never announce, label, or describe what language you heard, "
+        f"and never preface a translation with a note about it. "
         f"Speak naturally as their interpreter, preserving the speaker's original "
         f"tone and urgency. "
         f"Translate only the current utterance. Do not repeat, reference, or prepend "

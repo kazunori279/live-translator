@@ -96,8 +96,65 @@ def _apply_display_map(text: str, display_map: list[tuple[str, str]]) -> str:
     return out
 
 
+class _TranscriptRewriter:
+    """Applies the display map across streaming fragment boundaries.
+
+    Gemini sends the translated transcript in small increments and the browser
+    appends them, so replacing inside a single increment misses any term that
+    straddles a boundary. Measured: クバネティス arrives as 'をク' + 'バネティ' +
+    'スに', and no fragment on its own contains the term, so the replacement
+    never fires. Those turns carry no `finished` message either, so there is no
+    complete sentence to fall back on.
+
+    The protocol is append-only, so this holds back any trailing text that could
+    still grow into a glossary term and emits everything ahead of it. The held
+    text is shorter than the longest target, and the next fragment releases it.
+    Conversation mode also flushes on `turnComplete`; simul never sends one, so
+    a tail there waits for the next fragment, which is why the hold is capped.
+    """
+
+    def __init__(self, display_map: list[tuple[str, str]]):
+        self._map = display_map
+        self._pending = ""
+        self._prefixes = {
+            target[:i] for target, _ in display_map for i in range(1, len(target))
+        }
+        self._max_hold = max((len(t) for t, _ in display_map), default=1) - 1
+
+    def _hold_len(self, text: str) -> int:
+        """Length of the longest suffix that is still a partial glossary term."""
+        for n in range(min(self._max_hold, len(text)), 0, -1):
+            if text[-n:] in self._prefixes:
+                return n
+        return 0
+
+    def feed(self, text: str) -> str:
+        """Take a streamed increment, return the part safe to send now."""
+        if not self._map:
+            return text
+        buf = _apply_display_map(self._pending + text, self._map)
+        hold = self._hold_len(buf)
+        cut = len(buf) - hold
+        self._pending = buf[cut:]
+        return buf[:cut]
+
+    def supersede(self, text: str) -> str:
+        """A `finished` transcript carries the whole sentence, so it replaces."""
+        self._pending = ""
+        return _apply_display_map(text, self._map)
+
+    def flush(self) -> str:
+        """Release any held tail — the turn is over, nothing more is coming."""
+        out, self._pending = self._pending, ""
+        return out
+
+
+# DEBUG locally, where the verbose SDK and websockets output is what you want
+# while working on the relay. Deployments set LOG_LEVEL=INFO: at DEBUG the
+# websockets client logs the full Live API handshake, including the
+# `x-goog-api-key` header, which on Cloud Run lands in Cloud Logging.
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=os.environ.get("LOG_LEVEL", "DEBUG").upper(),
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
@@ -282,6 +339,7 @@ async def websocket_endpoint(
     display_map = _build_display_map(
         glossary_entries if glossary_entries is not None else load_default_glossary()
     )
+    rewriter = _TranscriptRewriter(display_map)
 
     if simul:
         active_model = SIMUL_MODEL
@@ -514,16 +572,27 @@ async def websocket_endpoint(
                             ot = envelope.get("outputTranscription")
                             if ot and ot.get("text") and display_map:
                                 original = ot["text"]
-                                replaced = _apply_display_map(
-                                    original, display_map
-                                )
-                                if replaced != original:
+                                if ot.get("finished"):
+                                    ot["text"] = rewriter.supersede(original)
+                                else:
+                                    ot["text"] = rewriter.feed(original)
+                                if ot["text"] != original:
                                     logger.debug(
                                         "Display map: %r -> %r",
                                         original,
-                                        replaced,
+                                        ot["text"],
                                     )
-                                ot["text"] = replaced
+                            if envelope.get("turnComplete") and display_map:
+                                # Nothing more is coming for this turn, so any
+                                # tail held back mid-term has to go out now
+                                # rather than wait for the next turn's stream.
+                                tail = rewriter.flush()
+                                if tail:
+                                    ot = envelope.setdefault(
+                                        "outputTranscription",
+                                        {"text": "", "finished": False},
+                                    )
+                                    ot["text"] = (ot.get("text") or "") + tail
                             await websocket.send_text(
                                 json.dumps(envelope)
                             )
