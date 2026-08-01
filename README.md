@@ -318,7 +318,9 @@ Session resumption was intentionally removed — it caused an off-by-one transla
 
 ### Gemini Live API Transient Errors and Recovery
 
-The Gemini Live API occasionally returns `1011 (service currently unavailable)` errors. Before the recovery fix, production logs showed ~20 errors per 24 hours in two patterns:
+The Gemini Live API occasionally returns `1011 (service currently unavailable)` errors. A later Cloud Run soak also recorded `1008 (policy violation) The operation was aborted.` 31 times in an hour; the recovery path below does not branch on the close code, so it handles both, and 30 of those 31 never reached a client.
+
+Before the recovery fix, production logs showed ~20 errors per 24 hours in two patterns:
 
 - **Mid-session kill** (~65% of cases): An active session is disconnected during `session.receive()`. The session was working, then Gemini drops it.
 - **Connect-time rejection** (~35% of cases): Gemini refuses to open a new session entirely. This typically follows a mid-session kill — the retry fails because Gemini is still recovering.
@@ -448,6 +450,16 @@ uv run python tests/test_long.py --url wss://YOUR_CLOUD_RUN_URL --duration 3600
 
 Options: `--url` (WebSocket base URL), `--duration` (seconds), `--source`/`--target` (language pair), `--mode` (`convo`, the app default; `simul`; or `agent` for the one-way path), `--log` (JSONL output path).
 
+Each run writes a `.report` alongside its JSONL. `tests/chart_soak.py` draws those distributions as bar charts, one run or several side by side, which is how the comparison charts below were produced:
+
+```bash
+uv run python tests/chart_soak.py soak_convo.report
+uv run python tests/chart_soak.py convo.report simul.report --labels convo simul \
+  --metrics "Translation Score" "Turn Complete"
+```
+
+Testing against `wss://` from macOS may fail with `CERTIFICATE_VERIFY_FAILED` if the Python framework build has no CA bundle. Point it at certifi's: `export SSL_CERT_FILE=$(uv run python -c "import certifi;print(certifi.where())")`.
+
 All three modes are driven with source-language audio and scored against a target-language translation. Simul is measured slightly differently: it never sends `turnComplete`, so an iteration is considered finished once transcription has been quiet for two seconds — the same rule the browser UI uses to close a caption bubble. The latency figure is back-dated to the last transcription so it stays comparable across modes. Idle is judged on transcription rather than on frames because simul keeps streaming silent audio after it stops speaking.
 
 #### Simul smoke results (90s, en → ja, local server)
@@ -470,7 +482,7 @@ Glossary display replacement fired in both modes. It used to fire only about hal
 
 These runs are too short to say anything about session stability; the hour-long runs below are the ones that cover GoAway handling.
 
-#### Latest soak test results (1 hour each, en → ja, convo and simul in parallel)
+#### Fragment fix soak (1 hour each, en → ja, convo and simul in parallel, local server)
 
 Both modes soaked simultaneously against one local server, so they shared a process and an API key while each held its own Live session. Run after the fragment-boundary fix to `_TranscriptRewriter`.
 
@@ -525,6 +537,66 @@ Glossary Iteration Score: n=67  min=10.00  avg=10.00
 Seven GoAways, all clean. Latency unchanged (turn complete avg 5.59s, p90 6.72s). The E2E suite still passes 7/7 in convo mode, which matters because a rewrite of this instruction could plausibly have broken the bidirectional routing it describes.
 
 Glossary *found rate* read 53/67 (79%) against 59/68 (87%) on the previous run, which is sentence-generation noise rather than a regression: every one of the 14 misses is the harness scoring a hit that was never available. The generator happened to produce more homograph sentences this time — "The **swift** bird darted through the sky", "The astrologer consulted her charts to understand **Gemini's** dual nature", "The architect used a strong **angular** design" — where the everyday word is the correct translation and there is no term to replace. The quality score on those same 67 iterations was a flat 10.00. Treat found-rate as a weak signal; the fragment-boundary behaviour is what `tests/test_glossary.py` pins down deterministically.
+
+#### Latest soak test results (1 hour each, en → ja, convo and simul in parallel, Cloud Run)
+
+Run against the deployed revision carrying both fixes, both modes at once. `--max-instances 1` means they shared a single container, so this is also a two-concurrent-session load test.
+
+```
+convo  Duration: 3631s | Iterations: 201 | Passed: 200/201 (99.5%) | Avg score: 9.9/10 | Errors: 0
+simul  Duration: 3610s | Iterations: 223 | Passed: 201/223 (90.1%) | Avg score: 9.3/10 | Errors: 1
+```
+
+Meta-prefix leaks: **0 of 201** convo iterations, holding the local result on real infrastructure. Latency matched local almost exactly — convo turn-complete avg 5.52s (local 5.59s), simul 0.52s (local 0.52s).
+
+```
+Translation Score
+      convo (n=201)                  simul (n=222)
+ 0-2  ······················   0.0%   ······················   1.4%
+ 3-4  ······················   0.5%   ······················   1.4%
+ 5-6  ······················   0.0%   █·····················   2.3%
+ 7-8  ······················   2.0%   ███···················  12.2%
+9-10  █████████████████████·  97.5%   ██████████████████····  82.9%
+      convo min=4.00  avg=9.91  p50=10.00  p90=10.00  p99=10.00  max=10.00
+      simul min=2.00  avg=9.25  p50=10.00  p90=10.00  p99=10.00  max=10.00
+
+Turn Complete (speech-end to full translation)
+       convo (n=200)                  simul (n=222)
+  <2s  ······················   0.0%   ██████████████████████  98.6%
+ 2-3s  ······················   0.0%   ······················   0.9%
+ 3-4s  █·····················   2.5%   ······················   0.5%
+ 4-5s  █████·················  24.0%   ······················   0.0%
+ 5-7s  ███████████████·······  69.0%   ······················   0.0%
+7-10s  █·····················   4.5%   ······················   0.0%
+ >10s  ······················   0.0%   ······················   0.0%
+       convo min=3.42  avg=5.52  p50=5.42  p90=6.70  p99=7.92  max=9.54
+       simul min=0.00  avg=0.52  p50=0.43  p90=1.11  p99=2.15  max=3.25
+
+Output Transcription Score
+      convo (n=201)                  simul (n=222)
+ 0-2  ······················   0.0%   ······················   0.9%
+ 3-4  ······················   1.0%   ······················   0.5%
+ 5-6  █·····················   3.0%   ······················   1.8%
+ 7-8  ██····················   8.0%   ██····················   9.5%
+9-10  ███████████████████···  88.1%   ███████████████████···  87.4%
+      convo min=3.00  avg=9.48  p50=10.00  p90=10.00  p99=10.00  max=10.00
+      simul min=1.00  avg=9.41  p50=10.00  p90=10.00  p99=10.00  max=10.00
+```
+
+The turn-complete chart is the clearest picture of what separates the two modes: simul has effectively everything under 2s because it emits while the speaker is still talking, convo clusters at 5–7s because it waits for the turn to end. They are not the same measurement. Transcription quality is near-identical (88.1% vs 87.4% in the top band) — the gap between the modes is in translation quality, not in how well either one hears.
+
+Charts are regenerated from the `.report` files rather than hand-copied:
+
+```bash
+uv run python tests/chart_soak.py soak_convo_prod.report soak_simul_prod.report \
+  --labels convo simul --metrics "Translation Score" "Turn Complete"
+```
+
+The interesting result is in the server logs. Over the hour the upstream Live API closed sessions **31 times** with `1008 (policy violation) The operation was aborted.` — a different close code from the `1011` described in [Gemini Live API Transient Errors and Recovery](#gemini-live-api-transient-errors-and-recovery), but caught by the same `session_loop` retry, which is code-agnostic. The retry path absorbed 30 of them invisibly. Exactly one surfaced to a client, as `ws closed during send` on simul iteration 33, costing a single iteration out of 223. Twelve GoAways in the same window, all clean. The service also fielded 38 unrelated uptime-check WebSocket connections on the same instance throughout.
+
+Simul's 90.1% against convo's 99.5% is not a Cloud Run problem. Of its 22 failures, 21 are the grader marking translation quality — omitted clauses, awkward phrasing, `Vertex AI` heard as "Virtual AI" — and only 1 is infrastructure. The same split shows up locally (13 failures, all quality, 0 infrastructure), so the mode is simply judged harder: it commits to output while the speaker is still talking and cannot revise, and it carries no system instruction to steer terminology.
+
+One deployment note worth knowing. `LOG_LEVEL=INFO` silenced the `x-goog-api-key` handshake dump on the new revision immediately — zero occurrences from `live-translation-00053-22v`. But the *previous* revision kept logging it for roughly 30 minutes after the cutover, 12 more times, because `--min-instances 1` plus `--timeout 3600` keeps an old container alive draining long-lived WebSocket connections. A deploy that fixes a logging leak does not stop the leak at the moment traffic switches.
 
 #### Historical soak test results (1 hour, en → ja, Cloud Run)
 
