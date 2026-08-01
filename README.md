@@ -364,6 +364,20 @@ Key flags:
 - `--min-instances 1` — avoids cold start latency
 - `--max-instances 1` — session resumption handles are stored in-memory; multi-replica requires a shared store (e.g. Redis)
 
+#### Deploying to more than one region
+
+Cloud Run services are regional, so the same command with a different `--region` gives a second independent endpoint under the same service name. This deployment runs in `us-central1` and `asia-northeast1` (Tokyo):
+
+```bash
+gcloud run deploy live-translation --source . \
+  --project YOUR_PROJECT --region asia-northeast1 \
+  --allow-unauthenticated --timeout 3600 \
+  --min-instances 1 --max-instances 1 \
+  --set-env-vars "GOOGLE_API_KEY=${GOOGLE_API_KEY},LOG_LEVEL=INFO"
+```
+
+What this does and does not buy you. The relay moves closer to the listener, which cuts the browser↔server leg of every audio frame — worth having for an audience in Japan. It does not move the model: `app/main.py` routes through `generativelanguage.googleapis.com` with an API key, so the server↔Gemini leg is unaffected by where the container runs. Each region also keeps its own in-memory session state, so a client must stay on one endpoint for the length of a conversation; there is no shared store to fail over to. Pick the region per event rather than load-balancing across both.
+
 ## Testing
 
 ### E2E Test
