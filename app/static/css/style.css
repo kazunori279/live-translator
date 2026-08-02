@@ -80,106 +80,95 @@ h1 {
 }
 
 
-.language-selector {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  flex: 1;
-}
-
-.custom-select {
-  position: relative;
-}
-
-.custom-select-trigger {
-  padding: 0.4rem 1.5rem 0.4rem 0.6rem;
+/* Panel controls
+ *
+ * The wake phrase is the primary interface, so these are deliberately quieter
+ * than Start: they are fallbacks, not the main path.
+ */
+.panel-action {
+  padding: 0.55rem 1rem;
   border: 1px solid var(--border-color);
   border-radius: 4px;
   background: var(--input-bg);
   color: #202124;
-  font-size: 1rem;
-  cursor: pointer;
+  font-size: 0.95rem;
   font-family: inherit;
+  cursor: pointer;
   white-space: nowrap;
-  appearance: none;
+  transition: background 0.15s ease;
 }
 
-.custom-select-trigger::after {
-  content: '▾';
-  position: absolute;
-  right: 0.5rem;
-  top: 50%;
-  transform: translateY(-50%);
-  font-size: 0.75rem;
-  pointer-events: none;
-  color: #5f6368;
-}
-
-.custom-select-trigger:hover {
+.panel-action:hover {
   background: #e8eaed;
 }
 
-.custom-select-dropdown {
-  display: none;
-  position: absolute;
-  bottom: 100%;
-  left: 0;
-  min-width: 260px;
-  max-height: 400px;
-  overflow-y: auto;
-  background: #2d2d2d;
-  border-radius: 6px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-  z-index: 1000;
-  margin-bottom: 4px;
-}
-
-.custom-select-dropdown.open {
-  display: block;
-}
-
-.custom-select-option {
-  padding: 0.5rem 0.75rem;
-  font-size: 1rem;
-  color: #e0e0e0;
-  cursor: pointer;
+/* Reads as "N held back", greyed out. It is a tuning signal after the event,
+   not something to watch during one. */
+.suppressed-count {
+  margin-left: auto;
+  font-size: 0.8rem;
+  color: #9aa0a6;
   white-space: nowrap;
 }
 
-.custom-select-option:hover {
-  background: rgba(66, 133, 244, 0.3);
+.ask-form {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.ask-form input {
+  flex: 1;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--input-bg);
+  color: #202124;
+  font-size: 0.95rem;
+  font-family: inherit;
+}
+
+.ask-send {
+  padding: 0.55rem 1rem;
+  border: none;
+  border-radius: 4px;
+  background: #4285f4;
   color: white;
+  font-size: 0.95rem;
+  font-family: inherit;
+  cursor: pointer;
 }
 
-.custom-select-option.selected {
-  background: rgba(66, 133, 244, 0.2);
-  color: #8ab4f8;
+.ask-send:hover {
+  background: #3367d6;
 }
 
-.custom-select-divider {
-  border-top: 1px solid #4e4e4e;
-  margin: 0.25rem 0;
-}
-
-.custom-select-dropdown::-webkit-scrollbar { width: 8px; }
-.custom-select-dropdown::-webkit-scrollbar-track { background: #2d2d2d; }
-.custom-select-dropdown::-webkit-scrollbar-thumb { background: #555; border-radius: 4px; }
-
-.auto-detect-label {
-  font-size: 1rem;
+.wake-hint,
+.briefing-info {
+  margin: 0.5rem 0 0;
+  font-size: 0.8rem;
   color: #5f6368;
+}
+
+/* Gate status pill.
+ *
+ * "Listening" is the state the assistant is in for nearly the whole session,
+ * so it stays flat and unremarkable; "armed" is the exception and lights up. */
+.gate-status {
+  padding: 0.25rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 0.8rem;
   white-space: nowrap;
 }
 
-/* Sits between the two language dropdowns where a swap button used to be, but
-   is deliberately unstyled as a control: there is nothing to click. */
-.lang-bidi-icon {
-  color: #80868b;
-  font-size: 1.1rem;
-  padding: 0.2rem 0.5rem;
-  border: 1px solid transparent;
-  line-height: 1;
-  user-select: none;
+.gate-status.armed {
+  background: #34a853;
+  border-color: #34a853;
+  color: white;
+  font-weight: 500;
 }
 
 .header-controls {
@@ -376,7 +365,7 @@ h1 {
   display: flex;
   gap: 0.75rem;
   align-items: center;
-  justify-content: space-between;
+  flex-wrap: wrap;
 }
 
 #message {
@@ -576,6 +565,46 @@ button {
   font-style: italic;
 }
 
+/* A question typed into the console rather than spoken, so it is marked as
+   coming from the moderator's keyboard and not from the room's microphone. */
+.message.user.typed .bubble {
+  border: 1px dashed #9aa0a6;
+}
+
+/* Grounding attribution.
+ *
+ * Google's Grounding with Search terms require the Search Suggestions chip to
+ * be rendered as delivered and the sources to be attributed whenever an answer
+ * is grounded, so this block is not optional decoration. */
+.grounding {
+  margin: 0.25rem 0 1rem 1rem;
+  font-size: 0.8rem;
+}
+
+/* Host of the shadow root holding Google's chip markup. The chip row is a
+   carousel that can be far wider than the column, so cap it here — otherwise
+   it stretches the transcript and the page scrolls sideways. */
+.search-suggestion {
+  margin-bottom: 0.4rem;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.grounding .sources {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: #5f6368;
+}
+
+.grounding .sources a {
+  color: #1a73e8;
+  text-decoration: none;
+}
+
+.grounding .sources a:hover {
+  text-decoration: underline;
+}
+
 
 /* Responsive */
 @media (max-width: 768px) {
@@ -679,17 +708,6 @@ button {
   padding: 0.05rem 0.35rem;
   border-radius: 4px;
   font-size: 0.85em;
-}
-
-.glossary-simul-note {
-  background: #fef7e0;
-  border: 1px solid #f9d67a;
-  border-radius: 8px;
-  padding: 0.7rem 1rem;
-  margin-bottom: 1rem;
-  font-size: 0.85rem;
-  line-height: 1.5;
-  color: #5f4b00;
 }
 
 .glossary-current {

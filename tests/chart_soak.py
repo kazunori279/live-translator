@@ -1,14 +1,14 @@
-"""Render soak-test distributions as bar charts, one mode or two side by side.
+"""Render soak-test distributions as bar charts, one run or several side by side.
 
 `test_long.py` writes a `.report` file per run with a histogram per metric. This
-reads those back and draws them as bars, which makes a two-mode comparison
+reads those back and draws them as bars, which makes a before/after comparison
 legible in a way that reading two reports in sequence is not.
 
 Run:
-    uv run python tests/chart_soak.py soak_convo_prod.report
-    uv run python tests/chart_soak.py soak_convo_prod.report soak_simul_prod.report
-    uv run python tests/chart_soak.py a.report b.report --labels convo simul \
-        --metrics "Translation Score" "Turn Complete"
+    uv run python tests/chart_soak.py soak_panel.report
+    uv run python tests/chart_soak.py soak_local.report soak_prod.report
+    uv run python tests/chart_soak.py a.report b.report --labels local prod \
+        --metrics "Answer Score" "Answer Complete"
 """
 
 import argparse

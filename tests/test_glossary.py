@@ -96,10 +96,11 @@ def main() -> int:
             print(f"      expected {expected!r}")
             print(f"      got      {got!r}")
 
-    # Simul never sends turnComplete, so nothing may be stranded mid-stream.
+    # A turn cut short by a session swap never reports itself complete, so
+    # nothing may be left stranded mid-stream waiting for a boundary.
     got = replay(CASES[0][1], turn_complete=False)
     ok = got == CASES[0][2]
-    print(f"{'PASS' if ok else 'FAIL'}  same sequence without turnComplete (simul)")
+    print(f"{'PASS' if ok else 'FAIL'}  same sequence with no turnComplete to flush on")
     if not ok:
         failures += 1
         print(f"      expected {CASES[0][2]!r}")

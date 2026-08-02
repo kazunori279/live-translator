@@ -1,5 +1,11 @@
 /**
- * app.js: JS code for the Live Translator app.
+ * app.js: the moderator's console for the AI panel assistant.
+ *
+ * The mic runs continuously and everything the panel says goes upstream — the
+ * assistant needs the whole discussion in context. What comes back is gated
+ * server-side, so most turns produce a transcript line and no audio at all.
+ * That is the normal, correct state, which is why the status pill exists: a
+ * silent assistant should look deliberate rather than broken.
  */
 
 /**
@@ -9,7 +15,7 @@
 const userId = "demo-user";
 let sessionId = "demo-session-" + Math.random().toString(36).substring(7);
 let websocket = null;
-const overlayChannel = new BroadcastChannel("live-translator");
+const overlayChannel = new BroadcastChannel("ai-panel");
 let is_audio = false;
 let pttMode = false;
 let audioInitialized = false;
@@ -18,16 +24,6 @@ let audioInitialized = false;
 // second life: audioInitialized flips before the mic is actually up.
 let micRunning = false;
 let micMuted = false;
-
-const SIMUL_KEY = "live-translator.simul";
-let simulMode = localStorage.getItem(SIMUL_KEY) === "true";
-// Conversation = bidirectional interpreter between the two chosen languages.
-// It is now the only alternative to Simul, so it has no toggle and no stored
-// preference of its own: anything that is not Simul is a conversation.
-let convoMode = !simulMode;
-
-const sourceLangSelect = document.getElementById("sourceLang");
-const targetLangSelect = document.getElementById("targetLang");
 
 // Hide subtitle when it would overlap controls or when header wraps
 {
@@ -50,124 +46,45 @@ const targetLangSelect = document.getElementById("targetLang");
   }
 }
 
-// Custom dropdown logic
-function populateDropdown(hiddenInput, trigger, dropdown, selectedCode, languages, popular, allCodes) {
-  dropdown.innerHTML = "";
-  let foundSelected = false;
+// Panel configuration from the server, which owns the model name, the voice
+// list and the knowledge base the assistant was briefed with.
+let panelConfig = { assistantName: "Gemini", topic: "" };
 
-  function addOption(code) {
-    const div = document.createElement("div");
-    div.className = "custom-select-option";
-    if (code === selectedCode) { div.classList.add("selected"); foundSelected = true; }
-    div.textContent = languages[code];
-    div.dataset.value = code;
-    div.addEventListener("click", () => {
-      hiddenInput.value = code;
-      trigger.textContent = languages[code];
-      dropdown.querySelectorAll(".custom-select-option").forEach(o => o.classList.remove("selected"));
-      div.classList.add("selected");
-      dropdown.classList.remove("open");
-      reconnectWithNewLanguage();
-    });
-    dropdown.appendChild(div);
-  }
+async function loadConfig() {
+  const resp = await fetch("/api/config");
+  panelConfig = await resp.json();
+  window._modelName = panelConfig.model;
+  populateVoiceSelect(panelConfig.voices, panelConfig.defaultVoice);
+  applyPanelLabels();
+}
+loadConfig();
 
-  for (const code of popular) addOption(code);
-  const divider = document.createElement("div");
-  divider.className = "custom-select-divider";
-  dropdown.appendChild(divider);
-  for (const code of allCodes) addOption(code);
-
-  if (foundSelected) {
-    hiddenInput.value = selectedCode;
-    trigger.textContent = languages[selectedCode];
-  } else if (popular.length > 0) {
-    const fallback = popular[0];
-    hiddenInput.value = fallback;
-    trigger.textContent = languages[fallback];
-    const first = dropdown.querySelector('.custom-select-option');
-    if (first) first.classList.add("selected");
+/** Put the assistant's name and briefing size in front of the moderator. */
+function applyPanelLabels() {
+  const name = panelConfig.assistantName || "Gemini";
+  const ask = document.getElementById("askButton");
+  if (ask) ask.textContent = `Ask ${name}`;
+  const hint = document.getElementById("wakeHint");
+  if (hint) hint.textContent = `Say "Hey ${name}, …" or 「${panelConfig.assistantNameJa || name}さん、…」`;
+  const brief = document.getElementById("briefingInfo");
+  if (brief) {
+    const files = (panelConfig.knowledge || []).length;
+    brief.textContent = files
+      ? `Briefed on ${files} research file${files === 1 ? "" : "s"} (${Math.round((panelConfig.briefingChars || 0) / 1000)}k chars) + Google Search`
+      : "No knowledge base found — running on Google Search alone";
   }
 }
-
-function setupCustomSelect(hiddenInput, trigger, dropdown, defaultCode, languages, popular, allCodes) {
-  populateDropdown(hiddenInput, trigger, dropdown, defaultCode, languages, popular, allCodes);
-
-  trigger.addEventListener("click", (e) => {
-    e.stopPropagation();
-    // Close other dropdowns
-    document.querySelectorAll(".custom-select-dropdown.open").forEach(d => {
-      if (d !== dropdown) d.classList.remove("open");
-    });
-    dropdown.classList.toggle("open");
-    // Scroll to selected item
-    const selected = dropdown.querySelector(".selected");
-    if (selected) selected.scrollIntoView({ block: "center" });
-  });
-}
-
-// Close dropdowns on outside click
-document.addEventListener("click", () => {
-  document.querySelectorAll(".custom-select-dropdown.open").forEach(d => d.classList.remove("open"));
-});
-
-// Populate language selectors from API
-let agentLangs = {}, agentPopular = [], agentAllCodes = [];
-let simulLangs = {}, simulPopularList = [], simulAllCodes = [];
-
-const AGENT_TO_SIMUL = { "zh": "zh-Hans", "iw": "he", "pt": "pt-BR" };
-const SIMUL_TO_AGENT = { "zh-Hans": "zh", "zh-Hant": "zh", "he": "iw", "pt-BR": "pt", "pt-PT": "pt" };
-
-function rebuildTargetDropdown() {
-  const langs = simulMode ? simulLangs : agentLangs;
-  const popular = simulMode ? simulPopularList : agentPopular;
-  const codes = simulMode ? simulAllCodes : agentAllCodes;
-  const mapTable = simulMode ? AGENT_TO_SIMUL : SIMUL_TO_AGENT;
-  let current = targetLangSelect.value;
-  if (!(current in langs) && current in mapTable) current = mapTable[current];
-  populateDropdown(
-    targetLangSelect, document.getElementById("targetLangTrigger"),
-    document.getElementById("targetLangDropdown"), current, langs, popular, codes
-  );
-}
-
-async function loadLanguages() {
-  const resp = await fetch("/api/languages");
-  const data = await resp.json();
-  window._modelName = data.model;
-  window._simulModelName = data.simulModel;
-
-  populateVoiceSelect(data.voices, data.defaultVoice);
-
-  agentLangs = data.languages;
-  agentPopular = data.popular;
-  agentAllCodes = Object.keys(agentLangs).sort((a, b) => agentLangs[a].localeCompare(agentLangs[b]));
-
-  simulLangs = data.simulLanguages;
-  simulPopularList = data.simulPopular;
-  simulAllCodes = Object.keys(simulLangs).sort((a, b) => simulLangs[a].localeCompare(simulLangs[b]));
-
-  setupCustomSelect(
-    sourceLangSelect, document.getElementById("sourceLangTrigger"),
-    document.getElementById("sourceLangDropdown"), "en", agentLangs, agentPopular, agentAllCodes
-  );
-  setupCustomSelect(
-    targetLangSelect, document.getElementById("targetLangTrigger"),
-    document.getElementById("targetLangDropdown"), "ja", agentLangs, agentPopular, agentAllCodes
-  );
-
-  if (simulMode) rebuildTargetDropdown();
-}
-loadLanguages();
 
 function getWebSocketUrl() {
   const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const source = sourceLangSelect.value;
-  const target = targetLangSelect.value;
-  let url = wsProtocol + "//" + window.location.host + "/ws/" + userId + "/" + sessionId + "?source=" + source + "&target=" + target;
-  if (simulMode) url += "&simul=true";
-  if (convoMode) url += "&convo=true";
-  return url;
+  return wsProtocol + "//" + window.location.host + "/ws/" + userId + "/" + sessionId;
+}
+
+/** Send a control message to the relay (arm the gate, ask for a topic, …). */
+function sendControl(payload) {
+  if (websocket && websocket.readyState === WebSocket.OPEN) {
+    websocket.send(JSON.stringify(payload));
+  }
 }
 
 // Get DOM elements
@@ -184,8 +101,6 @@ let currentOutputTranscriptionElement = null;
 let currentOutputRawText = "";
 let inputTranscriptionFinished = false;
 let hasOutputTranscriptionInTurn = false;
-let simulIdleTimer = null;
-const SIMUL_IDLE_MS = 2000;
 
 function finalizeTurn() {
   if (currentBubbleElement) {
@@ -212,13 +127,28 @@ function finalizeTurn() {
   hasOutputTranscriptionInTurn = false;
 }
 
-function resetSimulIdleTimer() {
-  if (!simulMode) return;
-  if (simulIdleTimer) clearTimeout(simulIdleTimer);
-  simulIdleTimer = setTimeout(() => {
-    simulIdleTimer = null;
-    finalizeTurn();
-  }, SIMUL_IDLE_MS);
+/**
+ * Gate status pill.
+ *
+ * The assistant is silent for almost the whole discussion, so the moderator
+ * needs to be able to tell "listening, working correctly" from "wedged". The
+ * server is the authority here — this only reflects what it reports.
+ */
+const GATE_LABELS = {
+  wake: "Addressed — answering",
+  button: "Armed — ask now",
+  topic: "Asked for a topic",
+  typed: "Answering typed question",
+};
+
+function updateGateStatus(armed, reason) {
+  const pill = document.getElementById("gateStatus");
+  if (!pill) return;
+  pill.classList.toggle("armed", !!armed);
+  pill.textContent = armed
+    ? GATE_LABELS[reason] || "Answering"
+    : "Listening";
+  overlayChannel.postMessage({ type: "gate", armed: !!armed, reason: reason || "" });
 }
 
 // Helper function to clean spaces between CJK characters
@@ -301,6 +231,74 @@ function scrollToBottom() {
   messagesDiv.scrollTop = messagesDiv.scrollHeight;
 }
 
+/**
+ * Suppressed turns.
+ *
+ * The model still tries to answer things nobody asked; the gate throws that
+ * audio away. Showing each one as a message would bury the real discussion, so
+ * it is a running count instead — useful for tuning the wake patterns after an
+ * event, invisible during one.
+ */
+let suppressedCount = 0;
+
+function markLastTurnSuppressed() {
+  suppressedCount += 1;
+  const el = document.getElementById("suppressedCount");
+  if (el) {
+    el.textContent = `${suppressedCount} held back`;
+    el.style.visibility = "visible";
+  }
+}
+
+/**
+ * Grounding attribution.
+ *
+ * When the assistant answers from Google Search, Google's terms require the
+ * Search Suggestions chip and the sources to be shown. `renderedContent` is
+ * first-party HTML from the API and is inserted as such; the source list is
+ * built from text so nothing else is.
+ */
+function renderGrounding(gm) {
+  if (!gm) return;
+  const chunks = gm.chunks || [];
+  const entry = gm.searchEntryPoint;
+  if (!chunks.length && !entry) return;
+
+  const box = document.createElement("div");
+  box.className = "grounding";
+
+  if (entry) {
+    const chip = document.createElement("div");
+    chip.className = "search-suggestion";
+    // The snippet ships its own <style>, and it styles a bare `.container` —
+    // the same class name this page uses for the main column. Inserted into
+    // the document it turns that column into a centred flex row and the whole
+    // layout falls over. A shadow root keeps Google's CSS to Google's markup.
+    chip.attachShadow({ mode: "open" }).innerHTML = entry;
+    box.appendChild(chip);
+  }
+
+  if (chunks.length) {
+    const list = document.createElement("ul");
+    list.className = "sources";
+    for (const c of chunks) {
+      if (!c.uri) continue;
+      const li = document.createElement("li");
+      const a = document.createElement("a");
+      a.href = c.uri;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      a.textContent = c.title || c.domain || c.uri;
+      li.appendChild(a);
+      list.appendChild(li);
+    }
+    if (list.children.length) box.appendChild(list);
+  }
+
+  messagesDiv.appendChild(box);
+  scrollToBottom();
+}
+
 let connectingMsg = null;
 
 // WebSocket handlers
@@ -328,9 +326,28 @@ function connectWebsocket() {
   websocket.onmessage = function (event) {
     const serverMsg = JSON.parse(event.data);
 
+    // Gate state changes. Server-authoritative: the wake phrase is matched
+    // against the transcript upstream, not here.
+    if (serverMsg.gate) {
+      updateGateStatus(serverMsg.gate.armed, serverMsg.gate.reason);
+      return;
+    }
+
+    // The model answered something nobody asked it and the gate stopped the
+    // audio. Worth showing quietly — it is the system working, not failing.
+    if (serverMsg.suppressed) {
+      markLastTurnSuppressed();
+      return;
+    }
+
+    // Search grounding — required attribution, so it renders whether or not
+    // this turn also carried audio.
+    if (serverMsg.groundingMetadata) {
+      renderGrounding(serverMsg.groundingMetadata);
+    }
+
     // Handle turn complete
     if (serverMsg.turnComplete === true) {
-      if (simulIdleTimer) { clearTimeout(simulIdleTimer); simulIdleTimer = null; }
       finalizeTurn();
       overlayChannel.postMessage({ type: "turnComplete" });
       return;
@@ -365,11 +382,10 @@ function connectWebsocket() {
           inputTranscriptionFinished = true;
         }
         scrollToBottom();
-        resetSimulIdleTimer();
       }
     }
 
-    // Handle output transcription (translated speech)
+    // Handle output transcription (what the assistant is saying)
     if (serverMsg.outputTranscription && serverMsg.outputTranscription.text) {
       const transcriptionText = serverMsg.outputTranscription.text;
       const isFinished = serverMsg.outputTranscription.finished;
@@ -404,7 +420,6 @@ function connectWebsocket() {
           currentOutputRawText = "";
         }
         scrollToBottom();
-        resetSimulIdleTimer();
       }
     }
 
@@ -442,7 +457,7 @@ function connectWebsocket() {
   };
 
   websocket.onclose = function () {
-    if (simulIdleTimer) { clearTimeout(simulIdleTimer); simulIdleTimer = null; }
+    updateGateStatus(false, "");
     updateConnectionStatus("disconnected");
     overlayChannel.postMessage({ type: "disconnected" });
     startAudioButton.disabled = true;
@@ -458,9 +473,17 @@ function connectWebsocket() {
 }
 connectWebsocket();
 
-function reconnectWithNewLanguage() {
+/**
+ * Tear down the session and start a fresh one.
+ *
+ * Used when a setting that only takes effect at session setup changes — the
+ * voice, for one. It also wipes the discussion so far, which is the point: the
+ * new upstream session has no memory of it either.
+ */
+function reconnectSession() {
   sessionId = "demo-session-" + Math.random().toString(36).substring(7);
   updateConnectionStatus("connecting");
+  updateGateStatus(false, "");
   startAudioButton.disabled = true;
   pttToggle.disabled = true;
   if (websocket) {
@@ -530,11 +553,8 @@ function startAudio() {
       addSystemMessage(`Could not start audio: ${errMsg}`);
       return;
     }
-    const { src, tgt } = getLanguageNames();
     addSystemMessage(
-      simulMode
-        ? `Ready to translate into ${tgt}`
-        : `Ready to interpret between ${src} and ${tgt}`
+      `Listening. ${panelConfig.assistantName || "Gemini"} will stay quiet until it is asked.`
     );
     if (pttMode) {
       startAudioButton.disabled = false;
@@ -592,40 +612,52 @@ document.addEventListener("visibilitychange", () => {
 
 const startAudioButton = document.getElementById("startAudioButton");
 const pttToggle = document.getElementById("pttToggle");
-const simulToggle = document.getElementById("simulToggle");
 
-simulToggle.checked = simulMode;
-
-function applySimulUi() {
-  const glossaryBtn = document.getElementById("openGlossary");
-  const langSelector = document.querySelector(".language-selector");
-  const autoDetectLabel = document.getElementById("autoDetectLabel");
-  const sourceLangWrapper = document.getElementById("sourceLangWrapper");
-  const bidiIcon = document.getElementById("bidiIcon");
-  const glossarySimulNote = document.getElementById("glossarySimulNote");
-  if (simulMode) {
-    sourceLangWrapper.style.display = "none";
-    autoDetectLabel.style.display = "";
-    if (glossarySimulNote) glossarySimulNote.style.display = "";
-  } else {
-    sourceLangWrapper.style.display = "";
-    autoDetectLabel.style.display = "none";
-    if (glossarySimulNote) glossarySimulNote.style.display = "none";
-  }
-  bidiIcon.style.display = simulMode ? "none" : "";
+/**
+ * The moderator's two escape hatches.
+ *
+ * Ask: opens the gate for the next thing said, for when the wake phrase does
+ * not land — a mumbled name, a noisy room, a panellist who says "and what
+ * about you?" without naming anyone. It expires on its own so a stray click
+ * cannot leave the assistant talking over the rest of the session.
+ *
+ * Topic: asks for a discussion prompt outright. Nothing is ever offered
+ * unprompted, so this is the only way one appears.
+ */
+const askButton = document.getElementById("askButton");
+if (askButton) {
+  askButton.addEventListener("click", () => {
+    sendControl({ type: "arm" });
+    updateGateStatus(true, "button");
+  });
 }
-applySimulUi();
 
-simulToggle.addEventListener("change", () => {
-  simulMode = simulToggle.checked;
-  localStorage.setItem(SIMUL_KEY, simulMode ? "true" : "false");
-  // The two modes are mutually exclusive and there is nothing else to fall
-  // back to, so turning Simul off returns you to a conversation.
-  convoMode = !simulMode;
-  rebuildTargetDropdown();
-  applySimulUi();
-  reconnectWithNewLanguage();
-});
+const topicButton = document.getElementById("topicButton");
+if (topicButton) {
+  topicButton.addEventListener("click", () => {
+    sendControl({ type: "topic" });
+    updateGateStatus(true, "topic");
+  });
+}
+
+// A typed question, for when the room is too loud to be heard or the moderator
+// wants to line up a question without saying it out loud.
+const askForm = document.getElementById("askForm");
+const askInput = document.getElementById("askInput");
+if (askForm && askInput) {
+  askForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const text = askInput.value.trim();
+    if (!text) return;
+    sendControl({ type: "ask", text });
+    const bubble = createMessageBubble(text, true);
+    bubble.classList.add("typed");
+    messagesDiv.appendChild(bubble);
+    askInput.value = "";
+    updateGateStatus(true, "typed");
+    scrollToBottom();
+  });
+}
 
 function initAudioIfNeeded() {
   if (audioInitialized) return;
@@ -633,24 +665,11 @@ function initAudioIfNeeded() {
   startAudio();
 }
 
-function getLanguageNames() {
-  const src = document.getElementById("sourceLangTrigger").textContent;
-  const tgt = document.getElementById("targetLangTrigger").textContent;
-  return { src, tgt };
-}
-
-/**
- * One-line description of what the session about to open will do.
- *
- * Simul auto-detects the source language, so naming the source dropdown there
- * would be a lie — that dropdown is hidden in Simul precisely because its value
- * is ignored. Conversation goes both ways, so it gets no arrow direction.
- */
+/** One line describing the session about to open. */
 function sessionDescription() {
-  const { src, tgt } = getLanguageNames();
-  return simulMode
-    ? `Any language → ${tgt} (Simultaneous)`
-    : `${src} ⇄ ${tgt} (Conversation)`;
+  const name = panelConfig.assistantName || "Gemini";
+  const topic = panelConfig.topic ? ` on ${panelConfig.topic}` : "";
+  return `${name} is listening to the panel${topic}`;
 }
 
 // The Start button doubles as the microphone mute control once audio is
@@ -711,7 +730,7 @@ pttToggle.addEventListener("change", () => {
     audioInitialized = false;
     micRunning = false;
     micMuted = false;
-    reconnectWithNewLanguage();
+    reconnectSession();
   }
 });
 
@@ -770,10 +789,11 @@ function audioRecorderHandler(pcmData) {
 /**
  * Glossary (client-side, per browser)
  *
- * The glossary lives in this browser only — stored in localStorage and sent
- * to the server as the first WebSocket message of each session. The server
- * never persists it, so different browsers can run different glossaries
- * concurrently.
+ * Here the glossary is a pronunciation guide: artist names, product names and
+ * Japanese loanwords the assistant would otherwise mangle out loud. It lives in
+ * this browser only — stored in localStorage and sent to the server as the
+ * first WebSocket message of each session. The server never persists it, so
+ * different browsers can run different glossaries concurrently.
  */
 const GLOSSARY_KEY = "live-translator.glossary.v2";
 const MAX_GLOSSARY_BYTES = 256 * 1024;
@@ -1241,7 +1261,7 @@ document.getElementById("applyAudio").addEventListener("click", () => {
   // Devices already switched when they were picked; the voice is all that is
   // left, and it is baked into the Live session's config, so a new choice only
   // applies once we reconnect.
-  if (getVoice() !== activeVoice) reconnectWithNewLanguage();
+  if (getVoice() !== activeVoice) reconnectSession();
 });
 
 document.getElementById("closeAudio").addEventListener("click", () => {
@@ -1311,17 +1331,17 @@ if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
 }
 
 /**
- * Translation voice (per browser)
+ * Assistant voice (per browser)
  *
- * The prebuilt voice the Live API speaks the translation in. The list and the
- * default come from /api/languages so the server stays the single source of
- * truth; the server also re-validates, since an unknown voice name makes the
- * upstream connect fail outright.
+ * The prebuilt voice the assistant answers in. The list and the default come
+ * from /api/config so the server stays the single source of truth; the server
+ * also re-validates, since an unknown voice name makes the upstream connect
+ * fail outright.
  *
  * The voice is fixed for the lifetime of a Live session, so changing it takes
  * effect on the next connection.
  */
-const VOICE_KEY = "live-translator.voice";
+const VOICE_KEY = "ai-panel.voice";
 const voiceSelect = document.getElementById("voiceSelect");
 let activeVoice = null; // voice the current Live session was opened with
 
@@ -1349,11 +1369,11 @@ voiceSelect.addEventListener("change", () => {
 
 function updateModelDisplay() {
   const el = document.getElementById("modelNameDisplay");
-  if (el) el.textContent = (simulMode ? window._simulModelName : window._modelName) || "";
+  if (el) el.textContent = window._modelName || "";
 }
 
 document.getElementById("openOverlay").addEventListener("click", () => {
-  window.open("/caption", "live-translator-caption");
+  window.open("/caption", "ai-panel-caption");
 });
 
 document.getElementById("openAudio").addEventListener("click", async () => {

@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Live Translator</title>
+    <title>AI Panel Assistant</title>
     <link rel="stylesheet" href="/static/css/style.css">
     <script src="/static/js/app.js" type="module"></script>
   </head>
@@ -11,9 +11,9 @@
   <body>
     <header>
       <div class="title-row">
-        <h1>Live Translator</h1>
+        <h1>AI Panel Assistant</h1>
         <span class="subtitle">powered by Gemini Live API</span>
-        <a class="github-link" href="https://github.com/kazunori279/live-translator" target="_blank" rel="noopener" title="View on GitHub">
+        <a class="github-link" href="https://github.com/kazunori279/adk-live-translator" target="_blank" rel="noopener" title="View on GitHub">
           <svg height="20" width="20" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
         </a>
       </div>
@@ -21,6 +21,10 @@
         <button id="openAudio" class="toggle-console-btn">Voice & Audio</button>
         <button id="openGlossary" class="toggle-console-btn">Glossary</button>
         <button id="openOverlay" class="toggle-console-btn">Caption</button>
+        <!-- The assistant is silent for almost the entire discussion. This pill
+             is how the moderator tells "working, waiting to be asked" apart
+             from "wedged". -->
+        <span class="gate-status" id="gateStatus">Listening</span>
         <div class="connection-status">
           <span class="status-indicator connecting" id="statusIndicator"></span>
           <span id="statusText">Connecting...</span>
@@ -35,24 +39,18 @@
           <button class="modal-close" id="closeGlossary" aria-label="Close">×</button>
         </div>
         <div class="modal-body">
-          <div id="glossarySimulNote" class="glossary-simul-note" style="display:none">
-            <strong>Simultaneous mode:</strong> The translation model does not
-            use the glossary — it will translate terms in its own way. However,
-            display replacements still work: if the model's output contains a
-            glossary <em>target</em> term, it will be replaced with the
-            <em>transcription</em> column on screen and in captions.
-          </div>
           <p class="modal-hint">
-            Replace this browser's glossary by loading a UTF-8 CSV with one
-            <code>source,target[,transcription]</code> per line. The optional
-            third column controls how the term appears in the on-screen
-            transcript — useful when you want a katakana pronunciation
-            (<code>target</code>) but a Latin display label
-            (<code>transcription</code>), e.g. <code>Vertex
-            AI,バーテックスエーアイ,Vertex AI</code>. The glossary is stored
-            locally in your browser and sent with each new session — it never
-            affects other users. Changes take effect on the next session
-            (click <strong>Start Audio</strong> again, or change languages).
+            The glossary is a pronunciation guide: names the assistant would
+            otherwise mangle out loud. Replace this browser's glossary by
+            loading a UTF-8 CSV with one
+            <code>source,target[,transcription]</code> per line —
+            <code>target</code> is how to say it, and the optional
+            <code>transcription</code> is how to spell it on screen. So
+            <code>Suno,スーノ,Suno</code> is said as スーノ and written as Suno.
+            The glossary is stored locally in your browser and sent with each
+            new session — it never affects other users. Changes take effect on
+            the next session (click <strong>Start</strong> again, or change the
+            voice).
           </p>
           <div class="glossary-current">
             <div class="glossary-current-header">
@@ -101,7 +99,7 @@
             <span id="modelNameDisplay" class="model-name"></span>
           </div>
           <div class="audio-setting">
-            <label for="voiceSelect">Translation voice</label>
+            <label for="voiceSelect">Assistant voice</label>
             <select id="voiceSelect"></select>
           </div>
           <div class="audio-actions">
@@ -116,38 +114,32 @@
         <div id="messages"></div>
 
         <div class="input-container">
+          <!-- Typed questions, for when the room is too loud for the wake
+               phrase to land or the moderator wants to line one up quietly. -->
+          <form class="ask-form" id="askForm" autocomplete="off">
+            <input type="text" id="askInput" placeholder="Type a question instead of saying it…">
+            <button type="submit" class="ask-send">Send</button>
+          </form>
+
           <div class="input-wrapper">
-            <span class="auto-detect-label" id="autoDetectLabel" style="display:none">Translate to:</span>
-            <div class="language-selector">
-              <div class="custom-select" id="sourceLangWrapper">
-                <button class="custom-select-trigger" id="sourceLangTrigger">English</button>
-                <div class="custom-select-dropdown" id="sourceLangDropdown"></div>
-                <input type="hidden" id="sourceLang" value="en">
-              </div>
-              <!-- Conversation mode interprets both ways, so there is no
-                   direction to swap: this is a label, not a control. Hidden
-                   in Simul mode, which is one-way into the target language. -->
-              <span class="lang-bidi-icon" id="bidiIcon" title="Both directions are interpreted">⇄</span>
-              <div class="custom-select" id="targetLangWrapper">
-                <button class="custom-select-trigger" id="targetLangTrigger">Japanese (日本語)</button>
-                <div class="custom-select-dropdown" id="targetLangDropdown"></div>
-                <input type="hidden" id="targetLang" value="ja">
-              </div>
-            </div>
             <button type="button" id="startAudioButton" disabled>Start</button>
+            <!-- The wake phrase is the normal path; these two are the
+                 moderator's fallbacks when it does not land or when the
+                 discussion needs a push. -->
+            <button type="button" id="askButton" class="panel-action">Ask Gemini</button>
+            <button type="button" id="topicButton" class="panel-action">Suggest a topic</button>
             <div class="toggle-group">
-              <label class="ptt-toggle">
-                <input type="checkbox" id="simulToggle">
-                <span class="ptt-slider"></span>
-                <span class="ptt-label">Simul</span>
-              </label>
               <label class="ptt-toggle">
                 <input type="checkbox" id="pttToggle" disabled>
                 <span class="ptt-slider"></span>
                 <span class="ptt-label">Push to Talk</span>
               </label>
             </div>
+            <span class="suppressed-count" id="suppressedCount" style="visibility:hidden"></span>
           </div>
+
+          <p class="wake-hint" id="wakeHint"></p>
+          <p class="briefing-info" id="briefingInfo"></p>
         </div>
       </div>
 

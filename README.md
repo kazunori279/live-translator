@@ -1,8 +1,8 @@
-# Live Translator
+# AI Panel Assistant
 
-Real-time audio translation powered by Gemini Live API. Speak in any language and hear the translation immediately. The default is **conversation mode**: a bidirectional interpreter between the two selected languages (97 languages, glossary), so two people can talk to each other. Toggling **Simul** switches to simultaneous translation mode (78 languages, auto-detect source language, one-way into the target).
+An AI panellist for a live, on-stage discussion, powered by the Gemini Live API. It listens to the whole conversation and says nothing — until someone on the panel turns to it and says *"Hey Gemini, what do you think about…"*. Then it answers in the language it was asked in, using a research briefing prepared for the topic and Google Search for anything newer than that.
 
-![Demo](demo.gif)
+The topic it ships with is **AI and music**, and the briefing under `knowledge/ai-and-music/` is about 50 000 words of researched material on the litigation, the economics, the technology, the artists, and the Japanese scene.
 
 ## Getting Started
 
@@ -34,47 +34,56 @@ Open http://localhost:8000.
 
 ## User Guide
 
-### Basic Usage
+### Running a panel
 
-1. Pick your two languages at the bottom of the screen.
-2. Click **Start**, and allow microphone access when the browser asks.
-3. Talk. What you said appears as text, and the translation is spoken aloud.
+1. Click **Start**, and allow microphone access when the browser asks.
+2. Put the microphone where it can hear the panel — a table mic, a room mic, or the moderator's laptop.
+3. Hold the discussion. The transcript builds on screen; the assistant stays silent.
+4. When you want it in, say its name: *"Hey Gemini, what do you make of that?"*
 
-Once you are running, **Start** turns into **Mute**. Muting stops sending your voice but keeps the microphone ready, so unmuting is instant and the browser won't ask for permission again.
+Once you are running, **Start** turns into **Mute**. Muting stops sending audio but keeps the microphone ready, so unmuting is instant and the browser won't ask for permission again.
 
-### Conversation (default)
+The pill in the header tells you which state it is in:
 
-Two people, two languages, one session. Say something in either of the languages you picked and the app speaks it in the other one. With English and Japanese selected, English comes out as Japanese and Japanese comes out as English — you never tell it who is talking, it works that out from what it hears.
+- **Listening** — hearing everything, saying nothing. This is the normal state and it is where the assistant spends the whole discussion.
+- **Addressed — answering** (green) — a wake phrase landed and the next thing it says will be heard.
+- **Armed — ask now** (green) — you pressed **Ask Gemini**; it is waiting for the question.
+- **Asked for a topic** / **Answering typed question** (green) — the other two ways in.
 
-Good for a two-way meeting, an interview, or a conversation at a booth.
+A small **N held back** counter appears in the control strip when the assistant tried to answer something nobody asked it and the gate stopped the audio. Zero is the goal; a number here is worth looking at after the event, not during one.
 
-- Both language dropdowns stay visible — choose the pair you want to interpret between.
-- Your glossary applies in both directions.
-- One voice speaks both sides of the conversation.
+### Getting its attention
 
-### Simultaneous Translation
+Say the name with something that makes it an address rather than a mention:
 
-Switch on **Simul** for one-way translation: whatever the microphone hears, in whatever language, comes out in the single language you choose. There is no source language to set, so that dropdown disappears.
+| Works | Does not |
+|---|---|
+| "Hey Gemini, what do you think?" | "The Gemini API does that natively" |
+| "Gemini, your take?" | "Suno and Gemini both do this" |
+| "So Gemini, is that fair?" | "Gemini can generate stems" |
+| 「ねえジェミニ、どう思う?」 | 「ジェミニのモデルは音楽も作れます」 |
+| 「ジェミニさん、意見を聞かせてください」 | |
 
-Good for a talk, a lecture, or a presentation — one speaker, an audience that needs one language.
+The bar is deliberately high. This panel will say the word *Gemini* as a product name all evening, and answering one of those means talking over a panellist in front of an audience. A missed wake phrase costs one repeated question; a false positive costs an interruption. So it errs towards silence — and there are two manual overrides for when it does:
 
-Compared with conversation mode:
-- **Nothing to configure but the output language** — it works out what is being spoken.
-- **78 languages** to choose from, rather than 97.
-- **The glossary doesn't steer the translation**, though your on-screen term substitutions still apply.
-- **Captions settle a moment later.** This mode doesn't signal where a sentence ends, so text is finalized after about two seconds of quiet.
+- **Ask Gemini** — press it, then just ask your question out loud. No wake phrase needed. The gate stays open for 30 seconds, so pressing it and *then* speaking works.
+- **Type a question** — the text box sends the question straight in. Useful when the room is loud, or when the moderator wants to line one up quietly.
 
-Switching **Simul** back off returns you to conversation mode, and your language choices carry over.
+### Suggest a topic
 
-### Push to Talk
+**Suggest a topic** asks the assistant for one question to put to the panel: something that would actually split the room, one sentence on why it is live right now, then it hands back to the moderator. It draws on the discussion prompts in its briefing but tailors them to what this panel has been arguing about in this session.
 
-Reach for this when the app is hearing more than you want it to — a noisy room or a busy booth, other conversations nearby, or [echo and feedback](#echo-and-feedback) from your speakers. The microphone only listens while you hold the button down, so background noise and the app's own voice never reach it between your turns.
+This is the only proactive thing it does, and it only does it when asked. It never volunteers a topic on its own.
 
-Toggle **Push to Talk** on the right to switch from always-on to manual control. Hold the **Hold to Talk** button (or press spacebar) to transmit, release to stop.
+### What its answers are like
+
+The assistant is instructed to behave like a panellist rather than a search engine: three or four sentences, 20–40 seconds, concrete names and dates and numbers, an actual opinion followed by the strongest argument against it. It never reads a URL aloud — it names the source instead.
+
+When an answer is grounded in Google Search, the sources appear under it along with Google's Search Suggestions chip. Both are required by Google's terms of service for grounded results, so they render whether or not you want them on screen.
 
 ### Voice & Audio Settings
 
-Click **Voice & Audio** in the header to choose your microphone, your speaker, and the **voice** that reads the translation — 30 to pick from, each labelled with its character (`Kore — Firm`, `Sulafat — Warm`). All three are remembered by your browser.
+Click **Voice & Audio** in the header to choose your microphone, your speaker, and the **voice** the assistant speaks in — 30 to pick from, each labelled with its character (`Charon — Informative`, `Sulafat — Warm`). All three are remembered by your browser.
 
 Microphone and speaker changes take effect straight away. Changing the voice restarts the session, which clears the transcript.
 
@@ -82,32 +91,32 @@ The app remembers every microphone and speaker you have chosen, in order of pref
 
 ### Glossary
 
-Click **Glossary** in the header to pin specific terms to fixed translations — product names, jargon, anything the model tends to get creative with. Your glossary is saved in your browser and applies only to you.
+Click **Glossary** in the header. Here it is a **pronunciation guide**: names the assistant would otherwise mangle out loud. Your glossary is saved in your browser and applies only to you.
 
 Upload a UTF-8 CSV with `source,target[,transcription]` per line:
 
 ```csv
-Kubernetes,クバネティス,Kubernetes
-Cloud Run,クラウドラン,Cloud Run
-Vertex AI,バーテックスエーアイ,Vertex AI
+Suno,スーノ,Suno
+Udio,ユーディオ,Udio
+JASRAC,ジャスラック,JASRAC
 ```
 
-The third column is optional and only changes what you see: the app *says* the second form and *shows* the third. That is useful for product names where you want a phonetic pronunciation but a normal spelling on screen.
+The third column is optional and only changes what you see: the app *says* the second form and *shows* the third. So `Suno,スーノ,Suno` is spoken as スーノ and written on screen as Suno.
 
-Changes take effect next time the session starts — click **Start** again, or change a language.
+Changes take effect next time the session starts — click **Start** again, or change the voice.
 
 ### Caption Overlay
 
-Put translated subtitles on top of any window — useful for presenting at an event, or for screen sharing on Google Meet. Click **Caption** in the header, or go to `/caption`.
+Put the discussion transcript on top of any window — useful for an on-stage screen, or for screen sharing on Google Meet. Click **Caption** in the header, or go to `/caption`.
 
 ![Caption Overlay](caption.png)
 
-1. Open the main app in Chrome and click **Start** to begin translating
+1. Open the main app in Chrome and click **Start**
 2. Click **Caption** in the header — a new window opens with a "Select Window" button
 3. Click **Select Window** and pick the window to mirror (your slides, Keynote, any app)
-4. That window's content appears in the caption page, with translated subtitles along the bottom
+4. That window's content appears in the caption page, with subtitles along the bottom
 5. Click **⛶ Fullscreen** in the top-right (or press **F**, or double-click) to fill the screen
-6. Share this caption window on Google Meet — participants see your slides with live subtitles
+6. Share this caption window on Google Meet — remote participants see the slides with live subtitles
 
 Fullscreen is a separate click from *Select Window* on purpose; the two can't be combined for browser security reasons. The button appears once mirroring starts and fades after 4 seconds so it stays off your slides — move the mouse to bring it back. **Esc** exits, as does stopping the screen share.
 
@@ -117,30 +126,65 @@ Both windows have to be in the same browser, and it must be Chrome. No OBS or ot
 
 The dot in the top-right corner shows:
 - **Yellow / Connecting…** — establishing the connection
-- **Green / Connected** — ready to translate
+- **Green / Connected** — listening
 - **Red / Disconnected** — connection lost; it retries automatically after 5 seconds
 
 ### Echo and Feedback
 
 **If you are on a phone, tablet, or laptop using its own built-in microphone and speakers, you can skip this section.** Your device cancels its own echo, and the app leaves that switched on. The same goes for headphones or an ordinary headset.
 
-You may run into echo if you are doing any of the following:
+You may run into trouble if you are doing any of the following:
 
 - Sending sound to a speaker other than **System Default** in Voice & Audio
-- Using external speakers, a PA system, or a mixing desk
-- Playing the translation on one device and picking it up with another
+- Using a PA system, external speakers, or a mixing desk — which is exactly what an on-stage panel uses
 - Working in a large or echoey room, or with a distant speaker
 
-In those setups the translation comes out of the speakers, the microphone hears it, and the app treats its own voice as something new to translate — so it starts talking to itself. It won't build into a squeal the way a PA system does. It keeps going at normal volume, one full sentence at a time, which is harder to notice and harder to stop.
+In those setups the assistant's answer comes out of the speakers and the panel microphones hear it. It will not build into a runaway loop the way a translator does — the assistant is silent by default and the [output gate](#the-output-gate) drops anything it says unprompted — but it can mistake its own returning voice for a panellist addressing it, and it clutters the transcript.
 
-The app pushes back on this in several ways ([how](#echo-handling)), but they only go so far. If you hear an echo, try these in order:
+If you hear an echo, try these in order:
 
-1. **Put on headphones.** This breaks the loop at the source and always works.
+1. **Put on headphones**, or route the assistant to a monitor the panel mics do not face.
 2. **Set the speaker back to System Default** in Voice & Audio. Sending audio anywhere else switches off the browser's echo cancellation — this is the most common cause of bad echo.
 3. **Turn the volume down**, or move the microphone further from the speakers.
-4. **Mute** while the translation is playing.
+4. **Push to Talk** — the microphone only listens while the button is held, so nothing reaches it between questions. Reach for this in a genuinely hostile room; it also means the assistant stops hearing the discussion, so it loses the context its answers draw on.
 
-Playing the translation through a PA system, a mixing desk, or a second computer defeats echo cancellation completely, because the sound never goes through this browser. In those setups headphones or a close-up microphone aren't optional.
+Playing the audio through a PA system or a mixing desk defeats echo cancellation completely, because the sound never goes through this browser.
+
+---
+
+## The knowledge base
+
+`knowledge/ai-and-music/` holds ten Markdown files, researched for this panel:
+
+| File | What is in it |
+|---|---|
+| `00-index.md` | Orientation, a routing table, the 20 facts worth citing, and a 28-term glossary |
+| `01-generative-music-landscape.md` | The tools, the companies, the model families |
+| `02-law-copyright-litigation.md` | The lawsuits, the rulings, the licensing settlements |
+| `03-industry-economics-platforms.md` | Streaming payouts, catalogue value, platform policy |
+| `04-artists-practice-backlash.md` | What working musicians are doing and refusing to do |
+| `05-technical-foundations.md` | How the models work, and where they fail |
+| `06-performance-tools-cocreation.md` | Live performance, DAW integration, co-creation |
+| `07-culture-authorship-labor.md` | Authorship, labour, and the cultural argument |
+| `08-japan-asia-scene.md` | JASRAC, the Japanese copyright exception, the regional scene |
+| `09-discussion-prompts.md` | Provocations, escalation ladders, devil's-advocate lines |
+
+Every file carries external links, so the briefing is also a reading list for the human panellists.
+
+**How it reaches the model.** At import time the files are digested into a single briefing that goes into the system instruction. That instruction is re-sent on every upstream session reopen — roughly every nine minutes — so its size is a real running cost, not a one-off. `PANEL_KNOWLEDGE_MAX_CHARS` (default 100 000) caps it. `00-index.md` and `09-discussion-prompts.md` go in as whole as the budget allows, because they are what the assistant reasons over; the topic files are cut down to their highest-priority sections, always on a heading boundary so no fact arrives half-stated. The current briefing is about 93 000 characters — check yours at `/api/config`.
+
+**Changing the topic.** Point `PANEL_KNOWLEDGE_DIR` at a different folder of `.md` files and set `PANEL_TOPIC` to match. Nothing else in the app is music-specific except the wake matcher's tolerance for the word *Gemini*, which is topic-independent.
+
+| Env var | Default | What it does |
+|---|---|---|
+| `PANEL_TOPIC` | `AI and music` | Named in the system instruction and the UI |
+| `PANEL_ASSISTANT_NAME` | `Gemini` | The name it answers to |
+| `PANEL_ASSISTANT_NAME_JA` | `ジェミニ` | The same, for Japanese wake phrases |
+| `PANEL_KNOWLEDGE_DIR` | `knowledge/ai-and-music` | Folder of `.md` files to brief from |
+| `PANEL_KNOWLEDGE_MAX_CHARS` | `100000` | Briefing budget |
+| `PANEL_MODEL` | `gemini-3.1-flash-live-preview` | Live model |
+| `PANEL_VOICE` | `Charon` | Default voice, before the browser's own choice |
+| `PANEL_WAKE_PATTERNS` | — | Newline-separated regexes, replacing the built-in list. A live event is the wrong place to discover that a speaker's accent defeats the defaults, so this is tunable from the deploy command |
 
 ---
 
@@ -154,82 +198,94 @@ sequenceDiagram
     participant S as Server (FastAPI)
     participant G as Gemini Live API
 
-    B->>S: WS /ws/{user}/{sid}?src&tgt[&simul]
+    B->>S: WS /ws/{user}/{sid}
     B->>S: JSON setup {glossary, voice}
-    S->>G: live.connect(sysInstruction, speechConfig)
+    S->>G: live.connect(panel instruction + briefing, google_search)
 
-    rect rgb(240, 248, 255)
-    note over B,G: Translation loop (repeat per utterance)
+    rect rgb(245, 245, 245)
+    note over B,G: Listening (the whole discussion)
     B->>S: binary PCM 16kHz
     S->>G: send_realtime_input(audio)
-    G-->>S: input and output transcriptions
-    S-->>B: {inputTranscription}, {outputTranscription}
-    G-->>S: model_turn audio chunk
-    S-->>B: {content.parts[inlineData]}
-    G-->>S: turn_complete
-    S-->>B: {turnComplete}
+    G-->>S: input transcription
+    S-->>B: {inputTranscription}
+    G-->>S: model audio (unprompted)
+    note over S: gate holds it, then drops it
+    S-->>B: {suppressed: true}
     end
 
-    B->>S: WS close
-    S->>G: session close
+    rect rgb(232, 245, 233)
+    note over B,G: Addressed ("hey Gemini, …")
+    G-->>S: input transcription containing the wake phrase
+    note over S: gate arms
+    S-->>B: {gate: {armed: true}}
+    G-->>S: model audio + output transcription + grounding
+    S-->>B: {content}, {outputTranscription}, {groundingMetadata}
+    G-->>S: turn_complete
+    S-->>B: {turnComplete}
+    note over S: gate closes again
+    end
 ```
 
-FastAPI bridges one browser WebSocket to a series of Gemini Live API sessions. The browser WS lives for the lifetime of the user's tab; upstream Live sessions are opened, expire (~15 min), and reopened underneath it transparently.
+FastAPI bridges one browser WebSocket to a series of Gemini Live API sessions. The browser WS lives for the lifetime of the tab; upstream Live sessions are opened, expire, and are reopened underneath it transparently.
 
-**Connection lifecycle:**
-
-1. Browser opens WebSocket to `/ws/{user_id}/{session_id}` and sends a JSON setup frame with the per-browser glossary
-2. Server builds a system instruction embedding the glossary and language pair
+1. Browser opens a WebSocket to `/ws/{user_id}/{session_id}` and sends a JSON setup frame with the per-browser glossary and voice
+2. Server builds a system instruction from the panel persona, the glossary, and the knowledge briefing
 3. Two background coroutines run concurrently:
-   - **session_loop** opens a Gemini Live session, drains messages from it, and forwards them as JSON envelopes to the browser
-   - **upstream_task** forwards binary audio frames from the browser WS to whichever upstream session is current
-4. When the upstream session sends a GoAway (observed `time_left=50s`), the server immediately starts opening the next session in the background while continuing to drain the current one — this eliminates dead time between sessions
-5. Once the old session finishes, the pre-opened session takes over seamlessly
+   - **session_loop** opens a Gemini Live session, drains messages, and forwards them as JSON envelopes through the gate to the browser
+   - **upstream_task** forwards binary audio frames from the browser to whichever upstream session is current
+4. Text frames from the browser are control messages, not audio: `{"type":"arm"}`, `{"type":"disarm"}`, `{"type":"topic"}`, `{"type":"ask","text":…}`
 
-**Wire format:** Each `LiveServerMessage` is translated into a camelCase JSON envelope the frontend understands (`turnComplete`, `inputTranscription`, `outputTranscription`, `content.parts[]`, `usageMetadata`).
+**Wire format:** each `LiveServerMessage` becomes a camelCase JSON envelope (`turnComplete`, `inputTranscription`, `outputTranscription`, `content.parts[]`, `groundingMetadata`, `usageMetadata`), plus two the server originates itself: `{"gate":{"armed",…}}` and `{"suppressed":true}`.
 
-**Transcription behavior:** Output transcription (the translated speech) streams in multiple partial chunks, so the UI can show word-by-word updates with a typing indicator. Input transcription (the user's spoken words) arrives as a single message with the complete text — the API does not stream partial input transcriptions, so the user's bubble appears all at once.
+### The output gate
 
-### Models
+The Live API has no "listen but do not speak" mode. `proactive_audio` — which would be the right tool — is not supported on `gemini-3.1-flash-live-preview`. So the model hears the entire discussion and forms an opinion about all of it, and the silence is enforced on the way out.
 
-**Agent mode** uses `gemini-3.1-flash-live-preview` via the Gemini API (`generativelanguage.googleapis.com`). The system instruction (built in `app/translator_agent/agent.py`) tells the model to translate only the current utterance and never repeat previous translations. The glossary is embedded as `source → target` pairs with case-insensitive matching.
+`OutputGate` in `app/main.py` buffers every envelope carrying model output. If the turn was armed, the buffer flushes and the room hears the answer. If it ends unarmed, the buffer is discarded and the room hears nothing.
 
-**Simultaneous translation mode** uses `gemini-3.5-live-translate-preview` with a `TranslationConfig` instead of system instructions. The config specifies `target_language_code` and `echo_target_language=False` (see [Echo Handling](#echo-handling)). This model auto-detects the source language and does not support tools, glossary, or system instructions.
+Four details are load-bearing:
 
-**Conversation mode** (the UI default) reuses the agent model (`gemini-3.1-flash-live-preview`) but with a bidirectional interpreter system instruction (`build_conversation_instruction` in `app/translator_agent/agent.py`): it tells the model to detect which of the two configured languages each utterance is in and reply in the other. The WebSocket carries a `convo=true` query param; the glossary is embedded bidirectionally (`source ↔ target`). Without that param the server falls back to one-way agent mode (`build_system_instruction`), which the UI no longer requests but the test harness still exercises.
+- **Buffering rather than discarding on arrival.** The wake phrase and the first audio chunk can land in the same batch from the API. Discarding as they arrive would clip the first syllable off every answer; buffering means the arm can retroactively release output that was already in hand. The gate test measures this: 3 of 3 chunks released.
+- **A cap on the buffer.** `GATE_BUFFER_MAX_BYTES` (200 KB) is several seconds of unrequested speech. Past that, the turn is written off and the rest of it is dropped rather than held — there is no plausible arm left in a turn that long.
+- **The silent keys ride separately.** Input transcription and `turnComplete` can share an envelope with the reply being held. They make no sound, they drive the captions, and the client needs the boundary to close out the turn, so the gate splits them off and forwards them even as it drops the audio they arrived with.
+- **The gate closes at the end of the answered turn.** Otherwise one wake phrase turns the assistant on for the rest of the evening — the failure that is worst on stage and least visible in a short test. `tests/test_gate.py` pins it: one answer per question.
 
-Audio input is 16 kHz mono PCM; output is 24 kHz PCM (both modes).
+A manual arm (`arm_manual`) works differently from a wake-phrase arm, because the moderator presses the button and *then* speaks. It has a wall-clock TTL (`MANUAL_ARM_TTL_SEC`, 30 s) so it survives the turn boundary between the press and the question, and it clears as soon as a turn actually produces speech.
 
-### Echo Handling
+### Wake-phrase detection
 
-Translated speech is played out loud, so any setup where the speakers reach the microphone closes a loop. It is worse than ordinary PA howl in one respect: each round trip is a fresh, fully-formed sentence rather than a resonant frequency, so it needs no gain margin to sustain and can run indefinitely at conversational volume. Three defences act in sequence.
+`WakeMatcher` in `app/panel_agent/agent.py`. Matching the bare name is not an option on a panel that discusses Gemini as a product, so a match requires the name **plus evidence of direct address**:
 
-**1. Browser echo cancellation (AEC).** `app/static/js/audio-recorder.js` requests `echoCancellation: true` and `noiseSuppression: true` explicitly rather than relying on the spec default, which is `true` in every browser targeted today but is not ours to depend on. AEC runs inside the browser's input-processing stage, before `createMediaStreamSource` and before the app sees a sample: it knows what was sent to the output device and subtracts that from the microphone signal. `autoGainControl` is deliberately **off** — it flattens the speaker's dynamics, and the system instruction asks the model to preserve tone and urgency.
+- a vocative cue in front of it — `hey|hi|hello|ok|alright|yo`, 「ねえ」「へい」「おい」, or the weaker `so|and|now|well|but`
+- an address marker behind it — a comma, a question mark, the end of the utterance, an honorific 「さん」, or a second-person question opening (`what|how|do you|can you|your take|どう思|教えて|…`)
 
-**2. Simul mode — `echo_target_language=False`.** The translation model accepts no system instruction, so a prompt-level guard is unavailable there; this config flag is the only echo control it has. It tells the model to stay silent on input already in the target language. That matters because the model's own output is, by construction, in the target language — with `True` the model parroted its own echo straight back out, giving a loop with gain ≈ 1 and no natural decay. The tradeoff is that a human genuinely speaking the target language gets no audio out, which is the desired behaviour for one-way translation anyway. Google's own docs also note that `True` introduces artifacts from background noise and music.
+The two strengths differ in what they will accept behind the name: a strong cue accepts a full stop and the end of the utterance ("Let's ask Gemini."), a weak one does not, because "Suno and Gemini." is a list rather than a hand-off. `can you` is matched rather than bare `can`, so "Gemini can generate stems" is a statement about the product and "Gemini, can you explain" is a question to the panellist.
 
-**3. Conversation and agent modes — `_ECHO_GUARD`.** Both system-instruction builders in `app/translator_agent/agent.py` end with a paragraph asking the model to stay silent when an utterance is its own earlier output coming back. This is a hint, not a rule: the model has no ground truth for what it emitted, its false-positive mode silently drops a real utterance, and it cannot reliably break a loop already in progress.
+Text is normalised before matching (NFKC, case-folded, full-width punctuation mapped) and eight spellings of the name are accepted, because speech recognisers return *gemani*, *jemini*, 「ジェミナイ」 as readily as the right one.
 
-**Where AEC stops working.** These are the setups that echo badly:
+Matching runs against **two strings**, and needs both. The turn's own text gives `^`-anchored patterns a clean anchor. A rolling 400-character window spanning turn boundaries catches a phrase the voice-activity detector split down the middle, leaving "Hey Gemini" in one turn and the question in the next. After a turn, only the last 60 characters of the window are kept — carrying a whole turn lets the end of one sentence sit next to the start of the next and form a phrase neither speaker said.
 
-- **Output routed to a non-default device.** Picking a speaker other than the system default calls `setSinkId`, but the canceller's reference signal is tied to the default output. It ends up subtracting audio nobody is playing, so cancellation is effectively off. This is the most common cause of heavy echo here.
-- **A PA system, external mixer, or second machine playing the audio.** The sound never passes through this browser's output path, so there is no reference signal to subtract. Nothing in the stack can help.
-- **Acoustic delay beyond the filter tail.** AEC models a finite tail, typically ~100–250 ms. A large room, a distant speaker, or a Bluetooth output whose latency exceeds that puts the echo outside the window the canceller can match.
-- **Double-talk.** When someone speaks over the playback, cancellers throttle back to avoid chewing up the near-end voice, and more echo leaks through.
+`tests/test_wake.py` has 73 cases, and the negatives are the point of it.
+
+### Models and tools
+
+`gemini-3.1-flash-live-preview` via the Gemini API (`generativelanguage.googleapis.com`), with `google_search` attached as a tool and AUDIO as the output modality. Audio input is 16 kHz mono PCM; output is 24 kHz PCM.
+
+Grounding metadata comes back on the same `server_content` as the answer and is forwarded to the browser, which renders the Search Suggestions chip from `searchEntryPoint` as delivered and lists the source chunks. Google's terms require both for grounded results.
+
+Typed questions and topic requests are injected with `send_realtime_input(text=…)` — mid-conversation text injection, which Gemini 3.1 supports — wrapped in a bracketed frame (`[A panellist is asking you directly, in text: …]`) so the model can tell an out-of-band instruction from something a panellist said in the room.
 
 ### Audio Devices and Voices
 
-Microphone and speaker choices build a **priority list** rather than a single setting, stored in `localStorage` under `live-translator.audio.inputPriority` / `outputPriority`. Each device picked moves to the top of its list (up to 10 remembered), and the app uses the highest-ranked device actually attached. On `devicechange` the list is re-evaluated and the running pipeline switches mid-session, so losing the mic in use drops to the next favourite instead of the system default. Picking a device also restarts the recorder or player immediately — persisting alone left the pipeline reading the old device until a reload. Choosing **System Default** is a deliberate opt-out and clears the list.
+Microphone and speaker choices build a **priority list** rather than a single setting, stored in `localStorage`. Each device picked moves to the top of its list (up to 10 remembered), and the app uses the highest-ranked device actually attached. On `devicechange` the list is re-evaluated and the running pipeline switches mid-session, so losing the mic in use drops to the next favourite instead of the system default. Choosing **System Default** is a deliberate opt-out and clears the list.
 
-Each entry stores **both `deviceId` and label**. A `deviceId` is perishable — the browser re-salts it when site permissions are cleared, and some devices return with a new one after a replug — so if the saved id no longer resolves, the device is matched by name and the stored id is repaired in place, keeping its rank. Entries for absent devices are retained, so plugging one back in reclaims its position.
+Each entry stores **both `deviceId` and label**. A `deviceId` is perishable — the browser re-salts it when site permissions are cleared, and some devices return with a new one after a replug — so if the saved id no longer resolves, the device is matched by name and the stored id is repaired in place, keeping its rank.
 
-The voice is part of the Live session's config, so changing it requires a reconnect (which clears the transcript); microphone and speaker changes do not. Unknown voice names sent by a client are rejected server-side and fall back to `Puck`, since the Live API refuses to connect on an unrecognised voice.
-
-Language selections survive a mode switch: codes are mapped between the two language sets in both directions (e.g. `zh` ↔ `zh-Hans`, `iw` ↔ `he`, `pt` ↔ `pt-BR`).
+The voice is part of the Live session's config, so changing it requires a reconnect (which clears the transcript); microphone and speaker changes do not. Unknown voice names sent by a client are rejected server-side, since the Live API refuses to connect on an unrecognised voice.
 
 ### Caption Overlay Internals
 
-The caption page uses the [Screen Capture API](https://developer.mozilla.org/en-US/docs/Web/API/Screen_Capture_API) to mirror the target window and the [BroadcastChannel API](https://developer.mozilla.org/en-US/docs/Web/API/BroadcastChannel) to receive transcription from the main page, so both pages must run in the same browser. No OBS or third-party tools needed.
+The caption page uses the [Screen Capture API](https://developer.mozilla.org/en-US/docs/Web/API/Screen_Capture_API) to mirror the target window and the [BroadcastChannel API](https://developer.mozilla.org/en-US/docs/Web/API/BroadcastChannel) (channel `ai-panel`) to receive transcription from the main page, so both pages must run in the same browser.
 
 Fullscreen needs its own click, separate from *Select Window*: `requestFullscreen()` consumes the transient user activation that `getDisplayMedia()` also requires, and the window picker preempts an in-flight fullscreen transition. Hence the dedicated button, which appears once mirroring starts and fades out after 4 seconds.
 
@@ -260,12 +316,12 @@ sequenceDiagram
     S->>N: send_realtime_input(audio)
 ```
 
-1. A new session starts opening immediately in the background (`_open_next()`), ready in ~200ms
-2. The old session continues draining — any in-progress translation completes and is forwarded to the browser
-3. After the old session ends, the pre-opened session becomes the active session
+1. A new session starts opening immediately in the background (`_open_next()`), ready in ~200 ms
+2. The old session continues draining — any answer in progress completes and is forwarded
+3. After the old session ends, the pre-opened session becomes active
 4. Audio from the browser is routed to the new session with no gap
 
-A drain that never finishes its turn is the awkward case: waiting out the whole 50s deadline is dead air the listener hears in full. Two thresholds bound it, both measured from the last frame actually forwarded to the browser (heartbeats don't count, so a turn genuinely in flight is never clipped):
+A drain that never finishes its turn is the awkward case: waiting out the whole 50 s deadline is dead air. Two thresholds bound it, both measured from the last frame actually forwarded to the browser (heartbeats don't count, so a turn genuinely in flight is never clipped):
 
 ```mermaid
 sequenceDiagram
@@ -286,68 +342,57 @@ sequenceDiagram
     note over S: new session adopted — already warm
 ```
 
-5. At `DRAIN_MIRROR_QUIET_SEC` (3s of quiet) the drain is treated as stalled and the microphone is teed into the replacement as well — speech going into a session that has stopped answering still reaches one that hasn't
-6. At `GOAWAY_IDLE_GRACE_SEC` (5s of quiet) the swap happens, instead of waiting out the deadline. The abandoned turn will never report itself complete, so the server sends a synthetic `turnComplete` to close the caption the client left open
-7. If a mirrored drain recovers and completes its turn after all, the replacement is discarded and a fresh one opened — it heard audio the old session went on to answer, so keeping it would mean translating the same words twice
+5. At `DRAIN_MIRROR_QUIET_SEC` (3 s of quiet) the drain is treated as stalled and the microphone is teed into the replacement as well — speech going into a session that has stopped answering still reaches one that hasn't
+6. At `GOAWAY_IDLE_GRACE_SEC` (5 s of quiet) the swap happens rather than waiting out the deadline. The abandoned turn will never report itself complete, so the server sends a synthetic `turnComplete` to close the caption the client left open
+7. If a mirrored drain recovers and completes its turn after all, the replacement is discarded and a fresh one opened — it heard audio the old session went on to answer, so keeping it would mean answering the same question twice
 
-What gets replayed into a replacement is decided by one rule: **the audio captured since the outgoing session last said anything.** Nothing was relayed after that point, so none of it has been translated, and anything older has been — replaying that too would translate the same words twice. `recent_audio` keeps every mic frame with its arrival time for ~10s so the cut can be made at that boundary rather than at a fixed offset.
+What gets replayed into a replacement is decided by one rule: **the audio captured since the outgoing session last said anything.** `recent_audio` keeps every mic frame with its arrival time for ~10 s so the cut can be made at that boundary rather than at a fixed offset. This also covers a GoAway that lands mid-sentence on a session that had already been quiet for longer than the grace: the cutover happens within milliseconds, the mirror never attaches, but the sentence so far is handed to the replacement the moment it is adopted.
 
-This also covers the case the thresholds alone miss: a GoAway that lands mid-sentence on a session that had already been quiet for longer than the grace. The cutover then happens within milliseconds and the mirror never attaches, but the sentence so far is still owed to the replacement, and is handed to it the moment it is adopted.
-
-**What it costs the listener.** Across 11 GoAways observed in soak testing (two 30-minute local runs and one 1-hour Cloud Run run), a GoAway takes one of four paths:
+**What it costs the room.** Across 11 GoAways observed in soak testing — measured on the live-translation app this repo grew out of, where every utterance demanded an answer and the seam was therefore maximally visible — a GoAway takes one of four paths:
 
 | Path | Observed | Effect |
 |---|---|---|
 | Old session finishes its turn | — | none — the swap happens between turns, mic audio keeps flowing to the dying session throughout |
-| Drain stalls, then recovers and completes its turn | 5 | none to the listener. The mirrored replacement heard audio the old session went on to answer, so it is discarded and a fresh one opened (~190ms, off the critical path) |
-| Drain stalls and never recovers | 3 | up to 5s before the translation lands, and only in a window where nothing was being delivered anyway. All three landed between utterances with no audio owed. The mirror means the replacement has been working on that audio for the last 2s, so it flushes shortly after the swap rather than starting cold |
-| GoAway lands mid-sentence on an already-quiet session | 3 | cutover in 2–4ms, the sentence so far (1.4–3.5s of audio) replayed 83–197ms later. All three iterations scored 10/10 at normal latency. Before the replay was added, all but the last word of that sentence was lost |
+| Drain stalls, then recovers and completes its turn | 5 | none. The mirrored replacement heard audio the old session went on to answer, so it is discarded and a fresh one opened (~190 ms, off the critical path) |
+| Drain stalls and never recovers | 3 | up to 5 s of delay, in a window where nothing was being delivered anyway. The mirror means the replacement has been working on that audio for the last 2 s, so it flushes shortly after the swap rather than starting cold |
+| GoAway lands mid-sentence on an already-quiet session | 3 | cutover in 2–4 ms, the sentence so far (1.4–3.5 s of audio) replayed 83–197 ms later. Before the replay was added, all but the last word of that sentence was lost |
 
-The soak speaks one sentence every ~17s with quiet gaps in between, which biases heavily towards the stalled paths — continuous speech keeps the drain talking and takes the first row far more often than these counts suggest.
+A gated panel assistant is far more forgiving than that: it is silent for almost every turn, so most GoAways land in a window where nothing is owed to anyone. The exposure is the seam falling inside the one turn in twenty where it is actually answering.
 
-The speaker never has to pause or repeat — every frame is captured regardless of which session is live. On the two cutover paths the seam is visible rather than audible: the synthetic `turnComplete` closes the caption the abandoned turn left open, and the replacement's translation of the same audio appears as a new caption below it.
-
-**Watch out for turn accounting.** The synthetic `turnComplete` is a turn boundary with no turn behind it. Anything pairing utterances 1:1 with turn boundaries over a long-lived socket will sit one turn behind for the rest of the connection once a cutover happens — the soak test did exactly this and reported 68% while translation itself was perfect. `tests/test_long.py` now flushes frames belonging to a turn it gave up on and rejects a boundary with no content in front of it; the browser client is unaffected because `finalizeTurn()` on an already-closed caption is a no-op.
+**Watch out for turn accounting.** The synthetic `turnComplete` is a turn boundary with no turn behind it. Anything pairing utterances 1:1 with turn boundaries over a long-lived socket will sit one turn behind for the rest of the connection once a cutover happens. `tests/test_long.py` flushes frames belonging to a turn it gave up on and rejects a boundary with no content in front of it; the browser client is unaffected because finalising an already-closed caption is a no-op.
 
 **Limitations:**
 
-- The model on the new session has no context from the previous one, so it starts fresh. The replay covers the audio, not the history.
-- On the cutover paths, mic audio arriving between the cutover and the adoption of the replacement (83–197ms observed) is still dropped: `pending_preroll` is captured as bytes at cutover, so frames landing during the wait are not in it. Capturing the cut timestamp instead and building the replay at adoption would close this.
+- The model on the new session has no context from the previous one. The replay covers the audio, not the history — so a session swap costs the assistant its memory of the discussion so far, and only the briefing survives. This is the largest known gap for a long panel.
+- On the cutover paths, mic audio arriving between the cutover and the adoption of the replacement (83–197 ms observed) is still dropped.
 
-Session resumption was intentionally removed — it caused an off-by-one translation cascade where the model would prepend the previous turn's translation to the current one. Without resumption, each session starts clean, which proved more reliable (98% pass rate vs 65% with resumption in 1-hour soak tests).
+Session resumption was intentionally removed — it caused an off-by-one cascade where the model prepended the previous turn's output to the current one.
 
 ### Gemini Live API Transient Errors and Recovery
 
-The Gemini Live API occasionally returns `1011 (service currently unavailable)` errors. A later Cloud Run soak also recorded `1008 (policy violation) The operation was aborted.` 31 times in an hour; the recovery path below does not branch on the close code, so it handles both, and 30 of those 31 never reached a client.
+The Live API occasionally returns `1011 (service currently unavailable)`. An hour-long Cloud Run soak also recorded `1008 (policy violation) The operation was aborted.` 31 times; the recovery path does not branch on the close code, so it handles both, and 30 of those 31 never reached a client.
 
-Before the recovery fix, production logs showed ~20 errors per 24 hours in two patterns:
-
-- **Mid-session kill** (~65% of cases): An active session is disconnected during `session.receive()`. The session was working, then Gemini drops it.
-- **Connect-time rejection** (~35% of cases): Gemini refuses to open a new session entirely. This typically follows a mid-session kill — the retry fails because Gemini is still recovering.
-
-These errors cascaded: a mid-session kill triggered a retry with a flat 1s delay, which was often also rejected because Gemini was still unavailable. The session connect call had no timeout, so it could hang indefinitely on unresponsive connections.
+Two patterns account for the failures: a **mid-session kill** (~65%), where an active session is disconnected during `session.receive()`, and a **connect-time rejection** (~35%), which typically follows one — the retry fails because Gemini is still recovering.
 
 **Recovery logic in `session_loop`:**
 
-1. **Connect timeout** (`CONNECT_TIMEOUT_SEC = 10`): The `conn.__aenter__()` call has a hard timeout so a hanging connect fails fast instead of blocking indefinitely.
-2. **Exponential backoff**: Retries start at 0.2s and double on each consecutive failure, capping at 4s. The backoff resets after a successful session. This avoids thrashing the API while still recovering quickly from transient blips.
-3. **Transparent reconnect**: The browser WebSocket stays open during retries — only the upstream Gemini session is affected. Once a new session opens, `upstream_task` resumes forwarding audio to it automatically.
-4. **No deadlock on the retry path**: `next_ready` is set only by the GoAway pre-open. Waiting on it when no open is in flight — after a session error, say — parked the loop forever, so the wait is gated on an `open_pending` flag and the error path clears it. This showed up in production as the app going unresponsive until the browser reconnected.
+1. **Connect timeout** (`CONNECT_TIMEOUT_SEC = 10`) so a hanging connect fails fast instead of blocking indefinitely.
+2. **Exponential backoff**: retries start at 0.2 s and double, capping at 4 s, resetting after a successful session.
+3. **Transparent reconnect**: the browser WebSocket stays open during retries — only the upstream session is affected.
+4. **No deadlock on the retry path**: `next_ready` is set only by the GoAway pre-open, so waiting on it after a session error parked the loop forever. The wait is gated on an `open_pending` flag that the error path clears.
 
-After the fix, production logs showed 1 error in 15 hours (vs ~12 in the same period before), with zero connect-time rejections — the faster initial retry reconnects before the cascading failure pattern kicks in.
-
-For real users streaming from a microphone, recovery is seamless — the new session picks up the live audio stream with a brief gap. For health checks that send a one-shot audio clip, the clip may be lost if the session dies before producing a response.
+After the fix, production logs showed 1 error in 15 hours (vs ~12 in the same period before), with zero connect-time rejections.
 
 ### SDK Note
 
-`app/main.py` clears `GOOGLE_GENAI_USE_VERTEXAI`, `GOOGLE_CLOUD_PROJECT`, and `GOOGLE_CLOUD_LOCATION` before constructing the genai client. These env vars cause the SDK to route through `aiplatform.googleapis.com`; clearing them forces Gemini API key routing via `generativelanguage.googleapis.com`.
+`app/main.py` clears `GOOGLE_GENAI_USE_VERTEXAI`, `GOOGLE_CLOUD_PROJECT`, and `GOOGLE_CLOUD_LOCATION` before constructing the genai client. These env vars route the SDK through `aiplatform.googleapis.com`; clearing them forces Gemini API key routing via `generativelanguage.googleapis.com`.
 
 ### Deployment to Cloud Run
 
 ```bash
 set -a && source app/.env && set +a
 
-gcloud run deploy live-translation \
+gcloud run deploy ai-panel \
   --source . \
   --project YOUR_PROJECT \
   --region us-central1 \
@@ -358,256 +403,95 @@ gcloud run deploy live-translation \
   --set-env-vars "GOOGLE_API_KEY=${GOOGLE_API_KEY},LOG_LEVEL=INFO"
 ```
 
+The `Dockerfile` copies `knowledge/` into the image, so the briefing ships with the service.
+
 Key flags:
-- `LOG_LEVEL=INFO` — the app defaults to `DEBUG`, which is useful locally but makes the `websockets` client log the whole Live API handshake, `x-goog-api-key` header included. On Cloud Run that goes to Cloud Logging, so deployments turn it down.
-- `--timeout 3600` — allows hour-long WebSocket conversations (upstream Live sessions cycle internally every ~15 min)
+- `LOG_LEVEL=INFO` — the app defaults to `DEBUG`, which makes the `websockets` client log the whole Live API handshake, `x-goog-api-key` header included. On Cloud Run that goes to Cloud Logging.
+- `--timeout 3600` — a panel runs longer than the default WebSocket timeout allows
 - `--min-instances 1` — avoids cold start latency
-- `--max-instances 1` — session resumption handles are stored in-memory; multi-replica requires a shared store (e.g. Redis)
+- `--max-instances 1` — session state is in-memory; multi-replica requires a shared store
 
 #### Deploying to more than one region
 
-Cloud Run services are regional, so the same command with a different `--region` gives a second independent endpoint under the same service name. This deployment runs in `us-central1` and `asia-northeast1` (Tokyo):
+Cloud Run services are regional, so the same command with a different `--region` gives a second independent endpoint under the same service name:
 
 ```bash
-gcloud run deploy live-translation --source . \
+gcloud run deploy ai-panel --source . \
   --project YOUR_PROJECT --region asia-northeast1 \
   --allow-unauthenticated --timeout 3600 \
   --min-instances 1 --max-instances 1 \
   --set-env-vars "GOOGLE_API_KEY=${GOOGLE_API_KEY},LOG_LEVEL=INFO"
 ```
 
-What this does and does not buy you. The relay moves closer to the listener, which cuts the browser↔server leg of every audio frame — worth having for an audience in Japan. It does not move the model: `app/main.py` routes through `generativelanguage.googleapis.com` with an API key, so the server↔Gemini leg is unaffected by where the container runs. Each region also keeps its own in-memory session state, so a client must stay on one endpoint for the length of a conversation; there is no shared store to fail over to. Pick the region per event rather than load-balancing across both.
+What this buys you: the relay moves closer to the room, which cuts the browser↔server leg of every audio frame — worth having for an event in Japan. What it does not: the server↔Gemini leg is unaffected, because routing goes through `generativelanguage.googleapis.com` regardless of where the container runs. Each region keeps its own in-memory state, so a client must stay on one endpoint for the length of a discussion. Pick the region per event rather than load-balancing across both.
+
+One deployment note. `LOG_LEVEL=INFO` silenced the `x-goog-api-key` handshake dump on a new revision immediately — but the *previous* revision kept logging it for roughly 30 minutes after cutover, because `--min-instances 1` plus `--timeout 3600` keeps an old container alive draining long-lived WebSocket connections. A deploy that fixes a logging leak does not stop the leak at the moment traffic switches.
 
 ## Testing
 
+Four of the five suites are offline — no server, no API key, no audio — and run in under a second between them. Run those first.
+
+```bash
+uv run python tests/test_wake.py      # 73 cases: what does and does not count as being addressed
+uv run python tests/test_gate.py      # 23 cases: what the room actually hears
+uv run python tests/test_glossary.py  #  8 cases: fragment-boundary term replacement
+```
+
+### Wake-phrase test
+
+`tests/test_wake.py` replays utterances through `WakeMatcher`. The negatives are the reason it exists: every way this panel will say "Gemini" without meaning to summon it — "the Gemini API", "Suno and Gemini both", "we built it on Gemini", 「ジェミニのモデルは」 — is pinned as a non-match, alongside the positives in both languages and the fragment-split cases.
+
+### Gate test
+
+`tests/test_gate.py` replays the exact envelope sequence `_relay_session` would hand the gate, with a hand-cranked clock so the manual-arm timeout is testable without sleeping. It covers the default silence, a product mention, a wake phrase, output that arrived before the arm, buffer overflow, the manual arm and its expiry, one-answer-per-question, and a held reply not swallowing the turn boundary it arrived with.
+
+### Glossary test
+
+`tests/test_glossary.py` replays recorded and synthetic transcription fragment sequences through `_TranscriptRewriter` and asserts the text the browser ends up with. Gemini splits transcription aggressively — `クバネティス` was observed arriving as `をク` + `バネティ` + `スに`, with no fragment containing the term — so replacement has to buffer across fragment boundaries.
+
 ### E2E Test
 
-`tests/test_e2e.py` checks that each mode does its own distinctive job, rather than just that something came back. It speaks into a session with macOS `say`, streams the audio over the WebSocket, and judges the reply.
+`tests/test_e2e.py` speaks into a live session with macOS `say`, streams the audio over the WebSocket, and judges the reply. Every case states an expectation in **both** directions, because a build that answers everything would pass any test that only checks whether a reply came back.
 
-The cases that matter:
+- **Four silence cases** — ordinary discussion, its own name as a product name, a Japanese product mention, and a question aimed at a human panellist by name.
+- **Five answering cases** — English wake phrase, Japanese wake phrase answered in Japanese, name-first with no cue word, a question the briefing already covers, and one that can only be answered by search (which then has to arrive with its sources).
+- **Three control cases** — the Ask button, Suggest a topic, and a typed question.
+- **One two-turn case** — a question, then ordinary discussion. The second turn must be silent, which is what proves the gate closes again.
 
-- **Conversation** interprets in *both* directions — one case speaks English and expects Japanese, one speaks Japanese and expects English, and one does both inside a single session.
-- **Simultaneous** translates one way into the target, and stays silent when the input is already in the target language. That silence case guards [`echo_target_language=False`](#echo-handling).
-- **Agent** translates one way, source to target. Not reachable from the UI, still served.
-- **Coverage** runs the remaining language pairs through the default mode.
-
-Direction is verified by writing system (kana, hangul, Latin, CJK-without-kana), so a mode that translated the wrong way would fail rather than pass on "some text arrived".
-
-Audio is judged by level and duration, not by frame count. A model declining to speak still streams frames — they are just digital silence, and the stream occasionally carries a lone blip above the noise floor. So "did it speak" means at least three frames above RMS 50 on a 32768 scale; measured utterances ran 8–16 such frames, and quiet streams 0–1.
+Audio is judged by level, not frame count: a model declining to speak still streams frames, they are just digital silence. "Spoke" means at least three frames above RMS 50 on a 32768 scale.
 
 ```bash
-# every case, against a local server
-uv run python tests/test_e2e.py
-
-# one mode, or one case
-uv run python tests/test_e2e.py --mode simul
-uv run python tests/test_e2e.py --match "both ways"
-
-# one ad-hoc utterance
-uv run python tests/test_e2e.py --say en ja "Hello, how are you?"
+uv run python tests/test_e2e.py                       # every case
+uv run python tests/test_e2e.py --match "Japanese"    # one case
+uv run python tests/test_e2e.py --say en "Hey Gemini, what is Suno?" --expect en
 ```
 
-Options: `--url` (WebSocket base URL, default `ws://localhost:8000`), `--mode` (`convo`, `simul`, or `agent`), `--match` (substring of a case description), `--say SOURCE TARGET TEXT`.
-
-Requires macOS (`say`) and `ffmpeg`.
-
-#### Latest E2E results (local server)
-
-```
-Test                                         Mode    Status Why
-------------------------------------------------------------------------------
-Conversation: forward (en spoken)            convo   PASS   got ja output
-Conversation: reverse (ja spoken)            convo   PASS   got en output
-Conversation: both ways in one session       convo   PASS   got ja+en output
-Simul: translates into the target            simul   PASS   got ja output
-Simul: silent on target-language input       simul   PASS   stayed silent, as expected
-Agent: one-way source to target              agent   PASS   got ja output
-Coverage: English to Spanish                 convo   PASS   got es output
-Coverage: English to French                  convo   PASS   got fr output
-Coverage: English to Korean                  convo   PASS   got ko output
-Coverage: English to Chinese                 convo   PASS   got zh output
-
-10/10 tests passed
-```
-
-The two-way case is the one worth reading the transcript for: "Good morning. How was your trip?" came back as 「おはようございます。旅はどうでしたか?」, and the Japanese reply 「とても楽しかったです。ありがとうございます。」 came back as "It was wonderful, thank you!" — both directions inside one session.
-
-### Glossary Test
-
-`tests/test_glossary.py` replays recorded and synthetic transcription fragment sequences through `_TranscriptRewriter` and asserts the text the browser ends up with. It is offline — no server, no API key, no audio — so it runs in under a second.
-
-The cases cover a term split three ways with no `finished` message (captured from a live run), a term split one character at a time, two terms split in one sentence, a `finished` message superseding the accumulated partials, and a held tail that never becomes a term and so must be released rather than swallowed. The last case is run twice, once with `turnComplete` and once without, because simul never sends one.
-
-```bash
-uv run python tests/test_glossary.py
-```
-
-```
-8/8 passed
-```
+Options: `--url` (default `ws://localhost:8000`), `--match`, `--say LANG TEXT`, `--expect`. Requires macOS (`say`) and `ffmpeg`.
 
 ### Soak Test
 
-`tests/test_long.py` validates translation quality, latency, glossary behavior, and session stability over extended periods (default 1 hour).
+`tests/test_long.py` drives a synthetic panel discussion over one long-lived WebSocket for an hour, which is what exercises the GoAway cycle. It generates each line with Gemini Flash Lite, speaks it with Cloud TTS in one of three rotating voices, and measures two things:
 
-It generates random English sentences via Gemini Flash Lite, converts them to audio with Google Cloud TTS, streams them through the translator WebSocket, transcribes the returned audio with Google Cloud STT, and verifies semantic correctness.
+- **False-speak rate** — turns it answered that nobody addressed to it. Every one is the assistant talking over a panellist in front of an audience. Any false speak fails the run.
+- **Miss rate** — questions it was asked and did not answer. Costs one repeated question.
+
+Three turns of ordinary discussion per question, and every third distractor drops the assistant's name as a product name, because that is the hard case. Chatter and name-drops are reported separately. Answers are graded by Flash Lite as a *panel contribution* — vagueness and padding score low even when the answer is correct — and latency is reported from the end of the panellist's speech.
 
 ```bash
 uv sync --extra test
 
-# 2-minute smoke test against local server
-uv run python tests/test_long.py --duration 120
-
-# 1-hour test against Cloud Run
-uv run python tests/test_long.py --url wss://YOUR_CLOUD_RUN_URL --duration 3600
+uv run python tests/test_long.py --duration 120                          # smoke test
+uv run python tests/test_long.py --url wss://YOUR_URL --duration 3600    # full hour
 ```
 
-Options: `--url` (WebSocket base URL), `--duration` (seconds), `--source`/`--target` (language pair), `--mode` (`convo`, the app default; `simul`; or `agent` for the one-way path), `--log` (JSONL output path).
+Options: `--url`, `--duration` (seconds), `--log` (JSONL output path).
 
-Each run writes a `.report` alongside its JSONL. `tests/chart_soak.py` draws those distributions as bar charts, one run or several side by side, which is how the comparison charts below were produced:
+Each run writes a `.report` alongside its JSONL. `tests/chart_soak.py` draws those distributions as bar charts, one run or several side by side:
 
 ```bash
-uv run python tests/chart_soak.py soak_convo.report
-uv run python tests/chart_soak.py convo.report simul.report --labels convo simul \
-  --metrics "Translation Score" "Turn Complete"
+uv run python tests/chart_soak.py soak_panel.report
+uv run python tests/chart_soak.py local.report prod.report --labels local prod \
+  --metrics "Answer Score" "Answer Complete"
 ```
 
 Testing against `wss://` from macOS may fail with `CERTIFICATE_VERIFY_FAILED` if the Python framework build has no CA bundle. Point it at certifi's: `export SSL_CERT_FILE=$(uv run python -c "import certifi;print(certifi.where())")`.
-
-All three modes are driven with source-language audio and scored against a target-language translation. Simul is measured slightly differently: it never sends `turnComplete`, so an iteration is considered finished once transcription has been quiet for two seconds — the same rule the browser UI uses to close a caption bubble. The latency figure is back-dated to the last transcription so it stays comparable across modes. Idle is judged on transcription rather than on frames because simul keeps streaming silent audio after it stops speaking.
-
-#### Simul smoke results (90s, en → ja, local server)
-
-Short run recorded when simul support was added, alongside a convo-mode control on the same server.
-
-```
-simul  Duration: 102s | Iterations: 6 | Passed: 6/6 (100.0%) | Avg score: 10.0/10 | Errors: 0
-       Turn Complete (speech-end to full translation), n=6
-       min=0.17  avg=0.84  p50=0.87  p90=1.44  max=1.44
-
-convo  Duration:  70s | Iterations: 5 | Passed: 5/5 (100.0%) | Avg score: 10.0/10 | Errors: 0
-       Turn Complete, n=5
-       min=4.85  avg=5.48  p50=5.49  p90=5.98  max=5.98
-```
-
-Simul's latency is far lower because it emits translation while the speaker is still talking, so first response lands at 0.00s and the tail is short. Convo waits for the turn to end before answering. The two numbers measure different things and should not be read as one mode being six times faster at the same job.
-
-Glossary display replacement fired in both modes. It used to fire only about half the time — an earlier convo run found the term in 21 of 40 glossary iterations, and historical agent-mode runs scored 62% and 55% — because the server replaced inside each streaming transcription fragment while the browser reassembled them afterwards, so any term split across a boundary was missed. Gemini splits aggressively (`クバネティス` was observed arriving as `をク` + `バネティ` + `スに`) and most turns carry no `finished` message to fall back on. `_TranscriptRewriter` now buffers across fragment boundaries; see the hour-long runs below for the result.
-
-These runs are too short to say anything about session stability; the hour-long runs below are the ones that cover GoAway handling.
-
-#### Fragment fix soak (1 hour each, en → ja, convo and simul in parallel, local server)
-
-Both modes soaked simultaneously against one local server, so they shared a process and an API key while each held its own Live session. Run after the fragment-boundary fix to `_TranscriptRewriter`.
-
-```
-convo  Duration: 3612s | Iterations: 204 | Passed: 203/204 (99.5%) | Avg score: 9.9/10 | Errors: 0
-simul  Duration: 3609s | Iterations: 229 | Passed: 216/229 (94.3%) | Avg score: 9.3/10 | Errors: 0
-```
-
-Thirteen GoAways across both sessions at a ~9-minute cadence, all with `time_left=50s`, every one cutting over without an error or a failed iteration.
-
-Latency, unchanged from earlier runs and still measuring different things per mode — convo answers after the turn ends, simul answers while the speaker is still talking:
-
-```
-       Turn Complete (speech-end to full translation)
-convo  n=204  min=0.65  avg=5.59  p50=5.60  p90=6.71  p99=8.45  max=11.02
-simul  n=229  min=0.00  avg=0.51  p50=0.44  p90=1.15  p99=1.99  max=2.11
-
-       First Response
-convo  n=204  min=0.00  avg=0.02  p50=0.00  p90=0.00  p99=0.38  max=1.95
-simul  n=229  all 0.00
-```
-
-Glossary display replacement, the measure the fix targeted:
-
-```
-convo  59/68 found (87%)   — was 52% on the same test before the fix
-simul  55/76 found (72%)
-```
-
-None of the remaining convo misses are fragment splits. They are the harness scoring a hit it was never going to get:
-
-- **Homographs.** The generated sentence uses the everyday word, not the technical term, so there is no term to replace — `Swift` → 素早い鳥, `Flutter` → 蝶が羽ばたく, `Dart` → ダーツ, `transformer` → 電線のトランス.
-- **Punctuation variants.** `Vue.js` came back as `Vuejs`, `Node.js` as `Node js`, so the literal target string does not match.
-- **Already correct.** `Visual Studio Code` was emitted in Latin script verbatim, which is the desired display; the check still counts it a miss.
-
-Simul's extra misses are a separate, real limitation: simul takes no system instruction, so nothing steers terminology, and the model produces its own readings — `Gemini` → 双子座, `DNS` → DNA, `RabbitMQ` → ウサギMQ, `GraphQL` → グラフQL, `Anthos` → アンソ. Display replacement cannot recover those because the text never contains the expected target.
-
-This run also surfaced the meta-prefix leak fixed below: 8 of 204 convo iterations prepended `(detected language: English)` to the caption.
-
-#### Meta-prefix fix (1 hour, en → ja, convo, local server)
-
-The conversation instruction used to read "first detect which of the two languages it is spoken in, then speak the translation in the OTHER language". Phrased as a two-step procedure, the model sometimes performed step one out loud, and in the worst cases the announcement displaced the opening words of the translation (`detected language: Englishなプロセスを通じて…`, scored 5/10). It clustered rather than scattering — two consecutive bursts, both late in a session's ~9-minute life, one of them carrying across a GoAway into the replacement session.
-
-The instruction now states the mapping without narrating a procedure, and forbids the announcement explicitly: "Work out which silently. Everything you say is the translation itself and nothing else — never announce, label, or describe what language you heard."
-
-```
-Duration: 3602s | Iterations: 201 | Passed: 200/201 (99.5%) | Avg score: 9.9/10 | Errors: 0
-Meta-prefix leaks: 0/201   (was 8/204)
-Glossary Iteration Score: n=67  min=10.00  avg=10.00
-```
-
-Seven GoAways, all clean. Latency unchanged (turn complete avg 5.59s, p90 6.72s). The E2E suite still passes 7/7 in convo mode, which matters because a rewrite of this instruction could plausibly have broken the bidirectional routing it describes.
-
-Glossary *found rate* read 53/67 (79%) against 59/68 (87%) on the previous run, which is sentence-generation noise rather than a regression: every one of the 14 misses is the harness scoring a hit that was never available. The generator happened to produce more homograph sentences this time — "The **swift** bird darted through the sky", "The astrologer consulted her charts to understand **Gemini's** dual nature", "The architect used a strong **angular** design" — where the everyday word is the correct translation and there is no term to replace. The quality score on those same 67 iterations was a flat 10.00. Treat found-rate as a weak signal; the fragment-boundary behaviour is what `tests/test_glossary.py` pins down deterministically.
-
-#### Latest soak test results (1 hour each, en → ja, convo and simul in parallel, Cloud Run)
-
-Run against the deployed revision carrying both fixes, both modes at once. `--max-instances 1` means they shared a single container, so this is also a two-concurrent-session load test.
-
-```
-convo  Duration: 3631s | Iterations: 201 | Passed: 200/201 (99.5%) | Avg score: 9.9/10 | Errors: 0
-simul  Duration: 3610s | Iterations: 223 | Passed: 201/223 (90.1%) | Avg score: 9.3/10 | Errors: 1
-```
-
-Meta-prefix leaks: **0 of 201** convo iterations, holding the local result on real infrastructure. Latency matched local almost exactly — convo turn-complete avg 5.52s (local 5.59s), simul 0.52s (local 0.52s).
-
-```
-Translation Score
-      convo (n=201)                  simul (n=222)
- 0-2  ······················   0.0%   ······················   1.4%
- 3-4  ······················   0.5%   ······················   1.4%
- 5-6  ······················   0.0%   █·····················   2.3%
- 7-8  ······················   2.0%   ███···················  12.2%
-9-10  █████████████████████·  97.5%   ██████████████████····  82.9%
-      convo min=4.00  avg=9.91  p50=10.00  p90=10.00  p99=10.00  max=10.00
-      simul min=2.00  avg=9.25  p50=10.00  p90=10.00  p99=10.00  max=10.00
-
-Turn Complete (speech-end to full translation)
-       convo (n=200)                  simul (n=222)
-  <2s  ······················   0.0%   ██████████████████████  98.6%
- 2-3s  ······················   0.0%   ······················   0.9%
- 3-4s  █·····················   2.5%   ······················   0.5%
- 4-5s  █████·················  24.0%   ······················   0.0%
- 5-7s  ███████████████·······  69.0%   ······················   0.0%
-7-10s  █·····················   4.5%   ······················   0.0%
- >10s  ······················   0.0%   ······················   0.0%
-       convo min=3.42  avg=5.52  p50=5.42  p90=6.70  p99=7.92  max=9.54
-       simul min=0.00  avg=0.52  p50=0.43  p90=1.11  p99=2.15  max=3.25
-
-Output Transcription Score
-      convo (n=201)                  simul (n=222)
- 0-2  ······················   0.0%   ······················   0.9%
- 3-4  ······················   1.0%   ······················   0.5%
- 5-6  █·····················   3.0%   ······················   1.8%
- 7-8  ██····················   8.0%   ██····················   9.5%
-9-10  ███████████████████···  88.1%   ███████████████████···  87.4%
-      convo min=3.00  avg=9.48  p50=10.00  p90=10.00  p99=10.00  max=10.00
-      simul min=1.00  avg=9.41  p50=10.00  p90=10.00  p99=10.00  max=10.00
-```
-
-The turn-complete chart is the clearest picture of what separates the two modes: simul has effectively everything under 2s because it emits while the speaker is still talking, convo clusters at 5–7s because it waits for the turn to end. They are not the same measurement. Transcription quality is near-identical (88.1% vs 87.4% in the top band) — the gap between the modes is in translation quality, not in how well either one hears.
-
-Charts are regenerated from the `.report` files rather than hand-copied:
-
-```bash
-uv run python tests/chart_soak.py soak_convo_prod.report soak_simul_prod.report \
-  --labels convo simul --metrics "Translation Score" "Turn Complete"
-```
-
-The interesting result is in the server logs. Over the hour the upstream Live API closed sessions **31 times** with `1008 (policy violation) The operation was aborted.` — a different close code from the `1011` described in [Gemini Live API Transient Errors and Recovery](#gemini-live-api-transient-errors-and-recovery), but caught by the same `session_loop` retry, which is code-agnostic. The retry path absorbed 30 of them invisibly. Exactly one surfaced to a client, as `ws closed during send` on simul iteration 33, costing a single iteration out of 223. Twelve GoAways in the same window, all clean. The service also fielded 38 unrelated uptime-check WebSocket connections on the same instance throughout.
-
-Simul's 90.1% against convo's 99.5% is not a Cloud Run problem. Of its 22 failures, 21 are the grader marking translation quality — omitted clauses, awkward phrasing, `Vertex AI` heard as "Virtual AI" — and only 1 is infrastructure. The same split shows up locally (13 failures, all quality, 0 infrastructure), so the mode is simply judged harder: it commits to output while the speaker is still talking and cannot revise, and it carries no system instruction to steer terminology.
-
-One deployment note worth knowing. `LOG_LEVEL=INFO` silenced the `x-goog-api-key` handshake dump on the new revision immediately — zero occurrences from `live-translation-00053-22v`. But the *previous* revision kept logging it for roughly 30 minutes after the cutover, 12 more times, because `--min-instances 1` plus `--timeout 3600` keeps an old container alive draining long-lived WebSocket connections. A deploy that fixes a logging leak does not stop the leak at the moment traffic switches.

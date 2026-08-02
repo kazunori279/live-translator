@@ -1,4 +1,11 @@
-"""FastAPI application for real-time live translation using the Gemini Live API."""
+"""FastAPI application for an AI panel assistant built on the Gemini Live API.
+
+The assistant sits in on a live panel discussion, hears everything, and speaks
+only when a panellist addresses it by name. Silence is enforced twice: the system
+instruction asks for it, and `OutputGate` below drops any audio the model
+produces for a turn nobody addressed. The prompt is the polite request; the gate
+is the guarantee.
+"""
 
 import asyncio
 import base64
@@ -30,20 +37,20 @@ from google import genai  # noqa: E402
 from google.genai import types  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).parent))
-from translator_agent import (  # noqa: E402
+from panel_agent import (  # noqa: E402
+    ASSISTANT_NAME,
+    ASSISTANT_NAME_JA,
     DEFAULT_VOICE,
-    LANGUAGES,
+    DISCUSSION_TOPIC,
     MODEL,
-    POPULAR_LANGUAGES,
-    SIMUL_LANGUAGES,
-    SIMUL_MODEL,
-    SIMUL_POPULAR_LANGUAGES,
+    TOPIC_SUGGESTION_PROMPT,
     VOICES,
-    build_conversation_instruction,
-    build_system_instruction,
+    WakeMatcher,
+    build_briefing,
+    build_panel_instruction,
+    knowledge_files,
     load_default_glossary,
     resolve_voice,
-    simul_language_code,
 )
 
 MAX_GLOSSARY_ENTRIES = 1000  # safety cap on per-session glossary length
@@ -61,16 +68,34 @@ GOAWAY_IDLE_GRACE_SEC = 5.0
 # hearing the microphone as well, so speech going into a session that has
 # stopped answering still reaches one that hasn't. Mirroring from the stall
 # rather than from the GoAway itself keeps a session that is merely between
-# chunks from having the same sentence translated twice, once by each; the
-# audio it missed is replayed on attach, so waiting costs no coverage, only
-# realtime warm-up for the replacement.
+# chunks from having the same question answered twice, once by each; the audio
+# it missed is replayed on attach, so waiting costs no coverage, only realtime
+# warm-up for the replacement.
 DRAIN_MIRROR_QUIET_SEC = 3.0
 # Mic frames kept for replay into a replacement session. ~125 frames/sec of
 # 512 bytes, so this is ~10s and ~320KB; what actually gets replayed is only
 # the audio the outgoing session never answered, which is bounded by
 # GOAWAY_IDLE_GRACE_SEC and so always well inside the window.
 RECENT_AUDIO_MAX_FRAMES = 1250
-AUTHOR = "live_translator"  # constant author tag echoed in every server frame
+AUTHOR = "panel_assistant"  # constant author tag echoed in every server frame
+
+# --- Output gate tuning ------------------------------------------------------
+# Audio the gate will hold for a turn that has not been armed yet. Output can
+# start before the input transcription that arms the turn has finished arriving,
+# so held output is flushed rather than dropped if the arm lands late. At 24 kHz
+# 16-bit mono this is about four seconds — far more than the gap between speech
+# ending and its transcription completing. A turn that overruns it is one the
+# model started answering unprompted, which is exactly what should be discarded.
+GATE_BUFFER_MAX_BYTES = 200_000
+# How long a manual arm (the "Ask Gemini" button) stays open waiting for the
+# question to be asked. Long enough for the moderator to press, draw breath and
+# speak; short enough that a stray press does not leave the gate open all night.
+MANUAL_ARM_TTL_SEC = 30.0
+# Input transcript kept for wake-phrase matching. The phrase arrives in
+# fragments and can straddle a turn boundary, so matching runs against a rolling
+# window rather than a single fragment.
+WAKE_WINDOW_CHARS = 400
+
 
 def _build_display_map(
     entries: list[tuple[str, str, str]],
@@ -99,18 +124,17 @@ def _apply_display_map(text: str, display_map: list[tuple[str, str]]) -> str:
 class _TranscriptRewriter:
     """Applies the display map across streaming fragment boundaries.
 
-    Gemini sends the translated transcript in small increments and the browser
-    appends them, so replacing inside a single increment misses any term that
-    straddles a boundary. Measured: クバネティス arrives as 'をク' + 'バネティ' +
-    'スに', and no fragment on its own contains the term, so the replacement
-    never fires. Those turns carry no `finished` message either, so there is no
-    complete sentence to fall back on.
+    Gemini sends the transcript in small increments and the browser appends
+    them, so replacing inside a single increment misses any term that straddles
+    a boundary. Measured: クバネティス arrives as 'をク' + 'バネティ' + 'スに', and no
+    fragment on its own contains the term, so the replacement never fires. Those
+    turns carry no `finished` message either, so there is no complete sentence to
+    fall back on.
 
     The protocol is append-only, so this holds back any trailing text that could
     still grow into a glossary term and emits everything ahead of it. The held
     text is shorter than the longest target, and the next fragment releases it.
-    Conversation mode also flushes on `turnComplete`; simul never sends one, so
-    a tail there waits for the next fragment, which is why the hold is capped.
+    `turnComplete` flushes whatever is still held.
     """
 
     def __init__(self, display_map: list[tuple[str, str]]):
@@ -149,6 +173,197 @@ class _TranscriptRewriter:
         return out
 
 
+class OutputGate:
+    """Decides, per turn, whether the assistant is allowed to be heard.
+
+    The Live API has no "respond only when addressed" switch — `proactive_audio`
+    is not supported on this model — so the model answers everything it hears and
+    the relay throws away what nobody asked for. Everything the panel says
+    reaches the model, which is the point: it needs the whole discussion in
+    context to answer well when it finally is asked something.
+
+    A turn is armed by a wake phrase in the input transcription ("Hey Gemini,
+    ...") or explicitly by the moderator's UI. Model output for an unarmed turn
+    is buffered, not dropped outright, because the model can start speaking
+    before the transcription that arms the turn has finished arriving. If the arm
+    lands, the buffer flushes and the answer plays whole; if the turn completes
+    unarmed, the buffer is discarded and the room hears nothing.
+    """
+
+    def __init__(self, matcher: WakeMatcher, now):
+        self._matcher = matcher
+        self._now = now  # loop.time, injected so tests can drive it
+        self._turn_text = ""  # what the panel has said in this turn
+        self._heard = ""  # rolling window, spanning turn boundaries
+        self._armed = False
+        self._reason = ""
+        self._buffer: list[dict] = []
+        self._buffered_bytes = 0
+        self._overflowed = False
+        self._spoke = False  # this turn produced audible output
+        self._manual_until = 0.0
+        # Counters for the soak harness and the status line.
+        self.answered_turns = 0
+        self.suppressed_turns = 0
+
+    # -- state ---------------------------------------------------------------
+
+    @property
+    def armed(self) -> bool:
+        return self._armed or self._now() < self._manual_until
+
+    @property
+    def reason(self) -> str:
+        # Derived rather than stored: a manual arm can expire on its own, and a
+        # stale reason on the status pill would claim the gate is open when it
+        # has already closed.
+        return self._reason if self.armed else ""
+
+    def arm(self, reason: str) -> None:
+        """Open the gate for this turn (wake phrase, or the moderator's button)."""
+        self._armed = True
+        self._reason = reason
+
+    def arm_manual(self, reason: str = "button") -> None:
+        """Open the gate now and keep it open until the question actually lands.
+
+        The moderator presses the button and *then* speaks, so a manual arm has
+        to survive the turn boundary between the press and the question.
+        """
+        self._manual_until = self._now() + MANUAL_ARM_TTL_SEC
+        self._reason = reason
+
+    def disarm(self) -> None:
+        self._armed = False
+        self._manual_until = 0.0
+        self._reason = ""
+
+    # -- input side ----------------------------------------------------------
+
+    def hear(self, text: str) -> str | None:
+        """Feed panel speech in. Returns the wake pattern that fired, if any.
+
+        Matching runs against two strings, and needs both. The turn's own text
+        gives the patterns anchored to the start of an utterance a clean anchor:
+        "Gemini, why is that?" is an address, but only if "Gemini" really is the
+        first word — and the rolling window would have the tail of the previous
+        speaker's sentence sitting in front of it. The rolling window in turn
+        catches a phrase the voice-activity detector split down the middle,
+        leaving "Hey Gemini" in one turn and the question in the next.
+        """
+        if not text:
+            return None
+        self._turn_text += text
+        self._heard = (self._heard + text)[-WAKE_WINDOW_CHARS:]
+        if self._armed:
+            return None
+        fired = self._matcher.match(self._turn_text) or self._matcher.match(
+            self._heard
+        )
+        if fired:
+            # Clear both so the same phrase cannot arm a second turn.
+            self._turn_text = ""
+            self._heard = ""
+            self.arm("wake")
+        return fired
+
+    # -- output side ---------------------------------------------------------
+
+    def filter(self, envelope: dict) -> list[dict]:
+        """Return the envelopes to forward now, given the gate's state.
+
+        The discussion transcript and the turn boundary always pass: they make
+        no sound, they drive the captions, and the client needs the boundary to
+        close the turn out even when the reply that came with it is discarded.
+        """
+        speech = _has_model_output(envelope)
+        if not speech:
+            return [envelope]
+        if self.armed:
+            self._spoke = True
+            if self._buffer:
+                held, self._buffer = self._buffer, []
+                self._buffered_bytes = 0
+                return held + [envelope]
+            return [envelope]
+        # Unarmed, so the reply is held — but the same message can carry the
+        # panel's own transcript and the end of the turn, and both of those are
+        # silent. Split them off and send them now: the buffer is about to be
+        # discarded, and the client needs the boundary to close out the turn.
+        passthrough = {k: envelope.pop(k) for k in _SILENT_KEYS if k in envelope}
+        silent = [passthrough] if passthrough else []
+        if self._overflowed:
+            return silent
+        self._buffered_bytes += _audio_bytes(envelope)
+        if self._buffered_bytes > GATE_BUFFER_MAX_BYTES:
+            # Seconds of unrequested speech with no arm in sight. This is the
+            # model answering something nobody asked it, so stop paying to hold
+            # it and stay silent for the rest of the turn.
+            self._overflowed = True
+            self._buffer = []
+            self._buffered_bytes = 0
+            logger.debug("Gate: buffer overflowed, suppressing rest of turn")
+            return silent
+        self._buffer.append(envelope)
+        return silent
+
+    def end_turn(self) -> bool:
+        """Close the turn. Returns True if output was suppressed."""
+        suppressed = bool(self._buffer) or self._overflowed
+        if suppressed:
+            logger.info(
+                "Gate: suppressed an unrequested reply (%d buffered frames%s)",
+                len(self._buffer),
+                ", overflowed" if self._overflowed else "",
+            )
+            self.suppressed_turns += 1
+        if self._spoke:
+            self.answered_turns += 1
+            # The question has been answered, so a manual arm has done its job.
+            self._manual_until = 0.0
+        self._armed = False
+        # Keep only the tail of the heard window. A wake phrase can straddle a
+        # turn boundary when the voice-activity detector splits "Hey Gemini"
+        # from the question that follows it, so some carry-over is needed — but
+        # carrying a whole turn lets the end of one sentence sit next to the
+        # start of the next and form a phrase neither speaker said.
+        self._heard = self._heard[-60:]
+        self._turn_text = ""
+        self._buffer = []
+        self._buffered_bytes = 0
+        self._overflowed = False
+        self._spoke = False
+        return suppressed
+
+    def drop_pending(self) -> None:
+        """Throw away held output — the session it belonged to is gone."""
+        self._buffer = []
+        self._buffered_bytes = 0
+        self._overflowed = False
+        self._spoke = False
+        self._armed = False
+
+
+def _has_model_output(envelope: dict) -> bool:
+    """Whether this envelope carries something the room would see or hear."""
+    return bool(envelope.get("content") or envelope.get("outputTranscription"))
+
+
+# Keys that can share an envelope with the model's reply but belong to the
+# panel, not the assistant. Held-back speech must never take these with it.
+_SILENT_KEYS = ("inputTranscription", "turnComplete")
+
+
+def _audio_bytes(envelope: dict) -> int:
+    content = envelope.get("content") or {}
+    total = 0
+    for part in content.get("parts") or []:
+        data = (part.get("inlineData") or {}).get("data")
+        if data:
+            total += len(data)
+    return total
+
+
 # DEBUG locally, where the verbose SDK and websockets output is what you want
 # while working on the relay. Deployments set LOG_LEVEL=INFO: at DEBUG the
 # websockets client logs the full Live API handshake, including the
@@ -169,6 +384,16 @@ app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 client = genai.Client(api_key=os.environ["GOOGLE_API_KEY"])
 
+# The briefing is read from disk once at import. It is static content baked into
+# the image, and rebuilding it per session would re-read ten files on every
+# GoAway reconnect for a result that cannot have changed.
+BRIEFING = build_briefing()
+logger.info(
+    "Knowledge base: %d files, %d-char briefing",
+    len(knowledge_files()),
+    len(BRIEFING),
+)
+
 
 @app.get("/")
 async def root():
@@ -182,18 +407,18 @@ async def caption():
     return FileResponse(Path(__file__).parent / "static" / "caption.html")
 
 
-@app.get("/api/languages")
-async def get_languages():
-    """Return available languages with popular ones highlighted."""
+@app.get("/api/config")
+async def get_config():
+    """Panel and voice configuration for the client UI."""
     return {
-        "languages": LANGUAGES,
-        "popular": POPULAR_LANGUAGES,
         "model": MODEL,
-        "simulModel": SIMUL_MODEL,
-        "simulLanguages": SIMUL_LANGUAGES,
-        "simulPopular": SIMUL_POPULAR_LANGUAGES,
         "voices": VOICES,
         "defaultVoice": DEFAULT_VOICE,
+        "assistantName": ASSISTANT_NAME,
+        "assistantNameJa": ASSISTANT_NAME_JA,
+        "topic": DISCUSSION_TOPIC,
+        "knowledge": [p.name for p in knowledge_files()],
+        "briefingChars": len(BRIEFING),
     }
 
 
@@ -241,6 +466,37 @@ def _parse_setup(raw: str) -> SetupData:
     return SetupData(glossary=entries, voice=voice)
 
 
+def _grounding_json(gm: types.GroundingMetadata) -> dict | None:
+    """The parts of grounding metadata the client has to display.
+
+    Google's Grounding with Search terms require that when a response is
+    grounded, the Search Suggestions chip is rendered as delivered and the
+    sources are attributed. Both travel here; `caption.html` and `app.js` render
+    them.
+    """
+    out: dict = {}
+    chunks = []
+    for chunk in gm.grounding_chunks or []:
+        web = getattr(chunk, "web", None)
+        if web is None:
+            continue
+        chunks.append(
+            {
+                "uri": web.uri or "",
+                "title": web.title or "",
+                "domain": getattr(web, "domain", "") or "",
+            }
+        )
+    if chunks:
+        out["chunks"] = chunks
+    if gm.web_search_queries:
+        out["queries"] = list(gm.web_search_queries)
+    sep = gm.search_entry_point
+    if sep is not None and sep.rendered_content:
+        out["searchEntryPoint"] = sep.rendered_content
+    return out or None
+
+
 def _envelope_from(msg: types.LiveServerMessage) -> dict | None:
     """Translate a LiveServerMessage into the camelCase JSON shape `app.js` expects.
 
@@ -263,6 +519,10 @@ def _envelope_from(msg: types.LiveServerMessage) -> dict | None:
                 "text": sc.output_transcription.text or "",
                 "finished": bool(sc.output_transcription.finished),
             }
+        if sc.grounding_metadata:
+            grounding = _grounding_json(sc.grounding_metadata)
+            if grounding:
+                out["groundingMetadata"] = grounding
         if sc.model_turn and sc.model_turn.parts:
             parts = []
             for p in sc.model_turn.parts:
@@ -300,16 +560,9 @@ async def websocket_endpoint(
     websocket: WebSocket,
     user_id: str,
     session_id: str,
-    source: str = "en",
-    target: str = "ja",
-    simul: bool = False,
-    convo: bool = False,
 ) -> None:
-    """WebSocket endpoint bridging browser audio to a Gemini Live session."""
-    logger.info(
-        "WS request: source=%s, target=%s, simul=%s, convo=%s",
-        source, target, simul, convo,
-    )
+    """WebSocket endpoint bridging panel audio to a gated Gemini Live session."""
+    logger.info("WS request: user=%s session=%s", user_id, session_id)
     await websocket.accept()
 
     # Wait for the client's setup message (carries the per-session glossary).
@@ -340,29 +593,33 @@ async def websocket_endpoint(
         glossary_entries if glossary_entries is not None else load_default_glossary()
     )
     rewriter = _TranscriptRewriter(display_map)
+    system_instruction = build_panel_instruction(
+        glossary_entries=glossary_entries, briefing=BRIEFING
+    )
+    gate = OutputGate(WakeMatcher(), asyncio.get_running_loop().time)
+    logger.info(
+        "Panel assistant ready: voice=%s, instruction=%d chars",
+        voice, len(system_instruction),
+    )
 
-    if simul:
-        active_model = SIMUL_MODEL
-        system_instruction = None
-        target_code = simul_language_code(target)
-        logger.info(
-            "Simultaneous mode: model=%s, target=%s, target_code=%s",
-            active_model, target, target_code,
-        )
-    else:
-        if convo:
-            system_instruction = build_conversation_instruction(
-                source, target, glossary_entries
-            )
-            logger.info("Conversation mode: %s <-> %s", source, target)
-        else:
-            system_instruction = build_system_instruction(
-                source, target, glossary_entries
-            )
-        target_code = None
-        active_model = MODEL
+    async def _notify(payload: dict) -> None:
+        """Send a control frame to the browser, ignoring a dead socket."""
+        try:
+            await websocket.send_text(json.dumps({**payload, "author": AUTHOR}))
+        except Exception:  # noqa: BLE001
+            pass
 
-    logger.info("Output voice: %s", voice)
+    # Gate state is re-evaluated at every turn boundary, which during a live
+    # discussion is every few seconds. Only transitions are worth a frame.
+    last_gate_sent: tuple[bool, str] | None = None
+
+    async def _notify_gate() -> None:
+        nonlocal last_gate_sent
+        state = (gate.armed, gate.reason)
+        if state == last_gate_sent:
+            return
+        last_gate_sent = state
+        await _notify({"gate": {"armed": state[0], "reason": state[1]}})
 
     # Shared state between the upstream forwarder and the session loop. The
     # forwarder has the lifetime of the browser WebSocket and writes to whichever
@@ -393,8 +650,56 @@ async def websocket_endpoint(
         except Exception:  # noqa: BLE001
             pass
 
+    async def _send_text(sess: "types.AsyncSession", text: str) -> None:
+        """Inject a text turn mid-conversation.
+
+        `send_realtime_input(text=...)` and not `send_client_content`: on this
+        model the latter is for seeding history before the stream starts and does
+        not prompt a reply once audio is flowing.
+        """
+        try:
+            await sess.send_realtime_input(text=text)
+        except Exception:  # noqa: BLE001
+            logger.warning("Failed to inject text turn", exc_info=True)
+
+    async def _handle_control(raw: str) -> None:
+        """Act on a control message from the moderator's UI."""
+        try:
+            msg = json.loads(raw)
+        except json.JSONDecodeError:
+            logger.debug("Ignoring non-JSON text frame")
+            return
+        kind = msg.get("type")
+        sess = current_session
+
+        if kind == "arm":
+            # The moderator is about to ask out loud, without a wake phrase.
+            gate.arm_manual("button")
+            await _notify_gate()
+        elif kind == "disarm":
+            gate.disarm()
+            await _notify_gate()
+        elif kind == "topic":
+            gate.arm_manual("topic")
+            await _notify_gate()
+            if sess is not None:
+                await _send_text(sess, TOPIC_SUGGESTION_PROMPT)
+        elif kind == "ask":
+            text = (msg.get("text") or "").strip()
+            if not text:
+                return
+            gate.arm_manual("typed")
+            await _notify_gate()
+            if sess is not None:
+                await _send_text(
+                    sess,
+                    f"[A panellist is asking you directly, in text: {text}]",
+                )
+        else:
+            logger.debug("Unknown control message: %r", kind)
+
     async def upstream_task() -> None:
-        """Forward browser audio into whichever Live session is current."""
+        """Forward panel audio into whichever Live session is current."""
         loop = asyncio.get_running_loop()
         try:
             while True:
@@ -413,7 +718,7 @@ async def websocket_endpoint(
                         continue
                     await _send_audio(sess, audio)
                 elif "text" in message:
-                    logger.debug("Ignoring text message (audio-only)")
+                    await _handle_control(message["text"])
         except WebSocketDisconnect:
             logger.debug("Upstream: client disconnected")
 
@@ -422,11 +727,10 @@ async def websocket_endpoint(
         nonlocal current_session, mirror_session
 
         def _build_config():
-            kwargs = dict(
+            cfg = types.LiveConnectConfig(
                 response_modalities=[types.Modality.AUDIO],
                 input_audio_transcription=types.AudioTranscriptionConfig(),
                 output_audio_transcription=types.AudioTranscriptionConfig(),
-                # Both models accept the same prebuilt voice set.
                 speech_config=types.SpeechConfig(
                     voice_config=types.VoiceConfig(
                         prebuilt_voice_config=types.PrebuiltVoiceConfig(
@@ -434,30 +738,20 @@ async def websocket_endpoint(
                         )
                     )
                 ),
-            )
-            if simul:
-                # echo_target_language=False is this mode's echo guard. The
-                # translation model takes no system instruction, so the prompt-
-                # level _ECHO_GUARD used by the other two modes is unavailable
-                # here. With True the model parrots any input already in the
-                # target language — and our own output is, by construction, in
-                # the target language, so speakers feeding the mic gave a loop
-                # with gain ~1 that never decayed. False makes the model stay
-                # silent on target-language input instead.
-                #
-                # The cost: a human genuinely speaking the target language gets
-                # no audio out. For one-way simultaneous translation that is
-                # what you want anyway — the room already understands them.
-                kwargs["translation_config"] = types.TranslationConfig(
-                    target_language_code=target_code,
-                    echo_target_language=False,
-                )
-            else:
-                kwargs["system_instruction"] = types.Content(
+                system_instruction=types.Content(
                     parts=[types.Part(text=system_instruction)]
-                )
-            cfg = types.LiveConnectConfig(**kwargs)
-            logger.debug("LiveConnectConfig: %s", cfg.model_dump(exclude_none=True))
+                ),
+                # The briefing is a snapshot; anything newer than it, or any
+                # figure the model is unsure of, comes from Search. Grounding
+                # metadata comes back on server_content and is forwarded to the
+                # client, which is what makes the required source attribution
+                # possible.
+                tools=[types.Tool(google_search=types.GoogleSearch())],
+            )
+            logger.debug(
+                "LiveConnectConfig: model=%s voice=%s tools=google_search",
+                MODEL, voice,
+            )
             return cfg
 
         next_ready = asyncio.Event()
@@ -475,7 +769,7 @@ async def websocket_endpoint(
             """Open and store the next session (runs concurrently with drain)."""
             try:
                 cfg = _build_config()
-                conn = client.aio.live.connect(model=active_model, config=cfg)
+                conn = client.aio.live.connect(model=MODEL, config=cfg)
                 sess = await conn.__aenter__()
                 next_session_ref[0] = sess
                 next_conn_ref[0] = conn
@@ -515,7 +809,7 @@ async def websocket_endpoint(
                     logger.debug("Using pre-opened session")
                 else:
                     cfg = _build_config()
-                    conn = client.aio.live.connect(model=active_model, config=cfg)
+                    conn = client.aio.live.connect(model=MODEL, config=cfg)
                     session = await asyncio.wait_for(
                         conn.__aenter__(), timeout=CONNECT_TIMEOUT_SEC
                     )
@@ -569,6 +863,19 @@ async def websocket_endpoint(
                             envelope = _envelope_from(msg)
                             if envelope is None:
                                 continue
+
+                            # Wake detection runs before the output filter, so a
+                            # phrase transcribed in the same batch as the first
+                            # audio chunk still arms that chunk's turn.
+                            it = envelope.get("inputTranscription")
+                            if it and it.get("text"):
+                                fired = gate.hear(it["text"])
+                                if fired:
+                                    logger.info(
+                                        "Wake phrase detected (%s)", fired
+                                    )
+                                    await _notify_gate()
+
                             ot = envelope.get("outputTranscription")
                             if ot and ot.get("text") and display_map:
                                 original = ot["text"]
@@ -593,10 +900,19 @@ async def websocket_endpoint(
                                         {"text": "", "finished": False},
                                     )
                                     ot["text"] = (ot.get("text") or "") + tail
-                            await websocket.send_text(
-                                json.dumps(envelope)
-                            )
+
+                            # The gate can move the turn boundary into a
+                            # separate envelope, so read it before filtering.
+                            ended = bool(envelope.get("turnComplete"))
+                            for out in gate.filter(envelope):
+                                await websocket.send_text(json.dumps(out))
                             last_relay_at = loop.time()
+
+                            if ended:
+                                if gate.end_turn():
+                                    await _notify({"suppressed": True})
+                                await _notify_gate()
+
                             if go_away_event.is_set():
                                 sc = msg.server_content
                                 if sc and sc.turn_complete:
@@ -701,9 +1017,10 @@ async def websocket_endpoint(
                             # A drain that stalled long enough to be mirrored
                             # and then completed its turn has answered the very
                             # audio the replacement was fed, so the replacement
-                            # would say it all over again. Throwing the session
-                            # away costs one fresh connect; sorting its queued
-                            # output apart from the next real turn costs more.
+                            # would answer it all over again. Throwing the
+                            # session away costs one fresh connect; sorting its
+                            # queued output apart from the next real turn costs
+                            # more.
                             logger.debug(
                                 "Discarding mirrored replacement (drain recovered)"
                             )
@@ -722,28 +1039,25 @@ async def websocket_endpoint(
                             await relay_task
                         except asyncio.CancelledError:
                             pass
+                        # Held output belonged to a turn on a session that is
+                        # about to be closed. It can never be completed, so it
+                        # can never be legitimately released.
+                        gate.drop_pending()
                         if mirror_session is None:
                             # Cut over before the mirror could attach — the
-                            # GoAway can land while the speaker is mid-sentence
+                            # GoAway can land while a panellist is mid-sentence
                             # and the session, quiet for a while already, gets
                             # dropped a few milliseconds later. Nothing was
                             # relayed after last_relay_at, so audio from that
                             # point on went unanswered and is owed to the
                             # replacement; anything earlier was answered and
-                            # replaying it would translate it twice.
+                            # replaying it would answer it twice.
                             pending_preroll = _audio_since(last_relay_at)
                         # The abandoned turn will never report itself complete,
                         # and the client keeps appending to an open caption
                         # until something does. Close it before the next
                         # session starts a turn of its own.
-                        try:
-                            await websocket.send_text(
-                                json.dumps(
-                                    {"turnComplete": True, "author": AUTHOR}
-                                )
-                            )
-                        except Exception:  # noqa: BLE001
-                            pass
+                        await _notify({"turnComplete": True})
                 else:
                     go_away_wait.cancel()
                     if relay_task.done() and relay_task.exception():
@@ -768,6 +1082,7 @@ async def websocket_endpoint(
                     except Exception:  # noqa: BLE001
                         pass
                 if error_cleanup:
+                    gate.drop_pending()
                     if open_next_task and not open_next_task.done():
                         open_next_task.cancel()
                     # The replacement is about to be closed, so stop feeding it.
@@ -794,4 +1109,7 @@ async def websocket_endpoint(
     except Exception:  # noqa: BLE001
         logger.exception("Unexpected error in streaming tasks")
     finally:
-        logger.debug("WebSocket handler exiting")
+        logger.info(
+            "WebSocket handler exiting (answered %d turns, suppressed %d)",
+            gate.answered_turns, gate.suppressed_turns,
+        )
