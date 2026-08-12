@@ -41,20 +41,35 @@ async function init() {
 
 /**
  * Language and voice lists come from the relay, so it stays the single source
- * of truth the way it is for the web app. A failure here is not fatal: it
- * almost always means the host permission has not been granted yet, and
- * English/Japanese is enough to get to the Options page and grant it.
+ * of truth the way it is for the web app.
+ *
+ * A failure here is not fatal — English/Japanese is enough to reach the Options
+ * page — but the two reasons it fails need different messages. Before the
+ * backend origin has been granted, Chrome blocks the fetch and reports it as an
+ * ordinary network error, which reads as "the server is down" when in fact
+ * nothing was ever sent. So the permission is checked first and the missing
+ * grant is named for what it is.
  */
 async function populateLanguages() {
   let data = null;
-  try {
-    const resp = await fetch(new URL("/api/languages", settings.backendUrl));
-    if (resp.ok) data = await resp.json();
-  } catch (err) {
+  const origins = [originPattern(settings.backendUrl)].filter(Boolean);
+  const granted = origins.length && (await chrome.permissions.contains({ origins }));
+  if (!granted) {
     showError(
-      `Could not reach ${settings.backendUrl}. Open Options to check the backend ` +
-        `and grant access to it.`
+      `Access to ${settings.backendUrl} has not been granted yet. Press Start to ` +
+        `grant it, or use Grant access in Options.`
     );
+  } else {
+    try {
+      const resp = await fetch(new URL("/api/languages", settings.backendUrl));
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      data = await resp.json();
+    } catch (err) {
+      showError(
+        `Could not reach ${settings.backendUrl} (${err.message}). Check the backend ` +
+          `in Options.`
+      );
+    }
   }
   agentLangs = data?.languages || LANG_FALLBACK;
   simulLangs = data?.simulLanguages || LANG_FALLBACK;
@@ -205,6 +220,15 @@ async function send(message, throwOnError = false) {
   if (throwOnError && reply && !reply.ok) throw new Error(reply.error);
   return reply;
 }
+
+// The grant can arrive from the Options page, from the Start button, or from
+// chrome://extensions. Whichever it was, the language lists are now fetchable
+// and the panel should stop showing an error the user has already dealt with.
+chrome.permissions.onAdded.addListener(async () => {
+  clearError();
+  await populateLanguages();
+  render();
+});
 
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg?.target !== "ui") return;
