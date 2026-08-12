@@ -1,0 +1,1107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Real-time voice on the Gemini Live API</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Google+Sans:ital,wght@0,400;0,500;0,700;1,400&family=Google+Sans+Text:ital,wght@0,400;0,500;0,700;1,400&family=Google+Sans+Code:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* =====================================================================
+   Google Cloud "Cloudstyle" deck — design tokens
+   Geometry is authored at 1280x720. Margin 64px, so the content box is
+   1152 x 552 with its top-left corner at (64, 104).
+   ===================================================================== */
+:root {
+  /* brand */
+  --blue:        #4285F4;
+  --red:         #EA4335;
+  --yellow:      #FBBC05;
+  --green:       #34A853;
+  /* blue ramp — use in this order for series in charts and diagrams */
+  --blue-900:    #174EA6;
+  --blue-800:    #185ABC;
+  --blue-700:    #1967D2;
+  --blue-300:    #8AB4F8;
+  --blue-100:    #D2E3FC;
+  --blue-050:    #E8F0FE;
+  /* neutrals */
+  --ink:         #202124;   /* titles, body copy */
+  --ink-2:       #5F6368;   /* secondary copy, footers */
+  --ink-3:       #80868B;   /* captions, disabled */
+  --hairline:    #DADCE0;
+  --surface:     #F8F9FA;   /* card / table zebra fill */
+  --white:       #FFFFFF;
+  /* tint pairs for diagram boxes: fill / stroke / text */
+  --tint-blue:   #E8F0FE;  --tint-blue-ink:   #174EA6;
+  --tint-green:  #E6F4EA;  --tint-green-ink:  #0D652D;
+  --tint-yellow: #FEF7E0;  --tint-yellow-ink: #B06000;
+  --tint-red:    #FCE8E6;  --tint-red-ink:    #A50E0E;
+  /* the Google spectrum bar */
+  --spectrum: linear-gradient(90deg, #FF5C8B 0%, #FF6230 10%, #FE9C15 20%,
+              #FFCF08 30%, #CCCB00 40%, #5CC410 50%, #06B08B 62%, #3185FF 76%, #3185FF 100%);
+  --font: 'Google Sans', 'Product Sans', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+  --font-text: 'Google Sans Text', 'Google Sans', 'Roboto', Arial, sans-serif;
+  --mono: 'Google Sans Code', 'Roboto Mono', 'SF Mono', Menlo, monospace;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; background: #202124; overflow: hidden; }
+body { font-family: var(--font); -webkit-font-smoothing: antialiased; }
+
+/* ---------- deck chrome ---------- */
+#stage { position: fixed; inset: 0; overflow: hidden; }
+#frame { width: 1280px; height: 720px; position: absolute; left: 50%; top: 50%;
+         transform: translate(-50%, -50%); transform-origin: center center;
+         box-shadow: 0 12px 48px rgba(0,0,0,.5); overflow: hidden; }
+#hud  { position: fixed; right: 18px; bottom: 12px; color: #9AA0A6; font-size: 13px;
+        font-family: var(--mono); z-index: 50; user-select: none; }
+#help { position: fixed; left: 18px; bottom: 12px; color: #5F6368; font-size: 12px; z-index: 50; user-select: none; }
+#notes { position: fixed; left: 0; right: 0; bottom: 0; max-height: 42vh; overflow: auto;
+         background: #16181a; color: #E8EAED; font-family: var(--font-text); font-size: 15px;
+         line-height: 1.6; padding: 18px 26px 26px; border-top: 1px solid #3C4043; display: none; z-index: 60; }
+#notes.on { display: block; }
+kbd { font-family: var(--mono); font-size: 11px; border: 1px solid #5F6368;
+      border-radius: 4px; padding: 1px 5px; color: #9AA0A6; }
+@media (max-width: 760px), (max-height: 500px) { #help { display: none; } }
+
+/* ---------- slide base ---------- */
+/* overflow: hidden clips deliberate corner bleeds at the slide edge. It also means
+   accidental overflow disappears silently — run scripts/overflow_probe.js. */
+.slide { position: absolute; inset: 0; width: 1280px; height: 720px; overflow: hidden;
+         background: var(--white); color: var(--ink);
+         padding: 104px 64px 72px; display: none; }
+.slide.active { display: block; }
+.slide.active.flex { display: flex; }
+.notes { display: none; }
+
+/* footer: Google Cloud · page number */
+.foot { position: absolute; left: 64px; right: 64px; bottom: 20px;
+        display: flex; align-items: baseline; font-family: var(--font-text);
+        font-size: 14px; color: var(--ink-2); }
+.foot .gc { margin-right: auto; }
+.foot .pageno { min-width: 22px; text-align: right; }
+.slide.dark .foot, .slide.tinted .foot, .slide.break .foot { color: rgba(255,255,255,.72); }
+.slide.break.yellow .foot { color: rgba(32,33,36,.7); }
+
+/* the Google Cloud wordmark, built from type. Swap in the official lockup
+   asset for anything that leaves the building. */
+.gclogo { font-family: var(--font); font-weight: 500; letter-spacing: -.5px; color: var(--ink); }
+.gclogo .b { color: #4285F4 } .gclogo .r { color: #EA4335 }
+.gclogo .y { color: #FBBC05 } .gclogo .g { color: #34A853 }
+.gclogo .w { color: var(--ink); }
+.slide.dark .gclogo .w { color: #fff; }
+
+/* the spectrum rule */
+.spectrum { height: 6px; background: var(--spectrum); border-radius: 3px; }
+
+/* ---------- type scale ---------- */
+.h      { font-size: 53px; font-weight: 500; line-height: 1.08; letter-spacing: -.5px; }
+.hsub   { margin-top: 14px; font-size: 21px; font-weight: 400; color: var(--ink-2);
+          font-family: var(--font-text); line-height: 1.5; max-width: 900px; }
+.h + .body, .h + .grid, .h + .rail, .hsub + .body, .hsub + .grid, .hsub + .rail { margin-top: 52px; }
+.body   { font-family: var(--font-text); font-size: 21px; line-height: 1.8; max-width: 552px; }
+.body.wide { max-width: 1152px; }
+.body p + p { margin-top: 30px; }
+.body b, .body strong { font-weight: 700; }
+.mut    { color: var(--ink-2); }
+.em     { color: var(--blue); }
+.small  { font-size: 18px; line-height: 1.6; }
+.cap    { font-family: var(--font-text); font-size: 14px; color: var(--ink-3); }
+.eyebrow { font-size: 21px; font-weight: 700; color: var(--blue);
+           text-transform: uppercase; letter-spacing: .2px; margin-bottom: 26px; }
+code, .code { font-family: var(--mono); font-size: .88em; background: var(--surface);
+              border: 1px solid var(--hairline); border-radius: 5px; padding: 1px 6px; color: var(--blue-900); }
+
+/* ---------- grids ---------- */
+.grid   { display: grid; column-gap: 56px; row-gap: 48px; }
+.grid.c2 { grid-template-columns: repeat(2, 1fr); }
+.grid.c3 { grid-template-columns: repeat(3, 1fr); column-gap: 40px; }
+.grid.c4 { grid-template-columns: repeat(4, 1fr); column-gap: 32px; }
+.grid.c5 { grid-template-columns: repeat(5, 1fr); column-gap: 26px; }
+/* narrow lead-in column + wide payload, the template's most common split */
+.rail   { display: grid; grid-template-columns: 420px 1fr; column-gap: 64px; align-items: start; }
+.rail.tight { grid-template-columns: 340px 1fr; }
+.colhead { font-size: 32px; font-weight: 500; line-height: 1.2; margin-bottom: 18px; }
+.subhead { font-family: var(--font-text); font-size: 21px; font-weight: 700; margin-bottom: 18px; }
+
+/* ---------- 1 · cover ---------- */
+.cover { padding: 0; }
+.cover .disp { position: absolute; left: 64px; top: 112px; font-size: 107px; font-weight: 500;
+               line-height: .96; letter-spacing: -2.5px; max-width: 760px; }
+.cover .when { position: absolute; left: 64px; top: 452px; font-size: 28px; color: var(--ink-2);
+               font-family: var(--font-text); }
+.cover .gclogo { position: absolute; left: 64px; bottom: 56px; font-size: 34px; }
+/* decorative corner art — an abstract spectrum arc, not the trademarked cloud mark.
+   Replace with the official mark asset when you have it. Class .bleed says "I run off
+   the edge on purpose"; the slide clips it and the overflow probe skips it. */
+.cover .art { position: absolute; right: -40px; bottom: -60px; width: 620px; height: 620px; opacity: .95; }
+
+/* ---------- 2 · contents ---------- */
+.contents { display: grid; grid-template-columns: 360px 1fr; column-gap: 64px; align-items: start; }
+.contents ol { list-style: none; }
+.contents li { display: flex; align-items: baseline; justify-content: space-between;
+               font-size: 32px; font-weight: 500; padding: 18px 0 14px;
+               border-bottom: 1px solid var(--hairline); }
+.contents li .n { color: var(--blue); font-variant-numeric: tabular-nums; }
+.contents.numfirst li { justify-content: flex-start; gap: 34px; border-bottom: 0; padding: 12px 0; }
+
+/* ---------- 3 · agenda (timed) ---------- */
+.agenda .spectrum { margin: 20px 0 44px; }
+.agenda .when { font-family: var(--font-text); font-size: 21px; font-weight: 700; }
+.agenda .what { font-size: 32px; font-weight: 500; margin-top: 14px; }
+.agenda .why  { font-family: var(--font-text); font-size: 21px; color: var(--ink); margin-top: 8px; line-height: 1.4; }
+
+/* ---------- 4 · section title (light, spectrum rule) ---------- */
+.section { padding: 0; }
+.section .spectrum { position: absolute; left: 64px; right: 64px; top: 68px; }
+.section .n    { position: absolute; left: 64px; top: 138px; font-size: 107px; font-weight: 500; line-height: .96; }
+.section .name { position: absolute; left: 64px; top: 240px; font-size: 107px; font-weight: 500;
+                 line-height: .96; letter-spacing: -2.5px; max-width: 1000px; }
+.section .kick { position: absolute; left: 64px; top: 386px; font-family: var(--font-text);
+                 font-size: 32px; color: var(--ink-2); max-width: 880px; line-height: 1.4; }
+
+/* ---------- 5 · break slide (full-bleed brand colour) ---------- */
+.break { color: #fff; }
+.break.blue   { background: var(--blue); }
+.break.green  { background: var(--green); }
+.break.red    { background: var(--red); }
+.break.yellow { background: var(--yellow); color: var(--ink); }
+.break .n    { font-size: 53px; font-weight: 500; }
+.break .name { margin-top: 56px; font-size: 53px; font-weight: 500; line-height: 1.08; max-width: 420px; }
+.break .rows { position: absolute; left: 596px; right: 64px; top: 190px; }
+.break .rows li { list-style: none; font-family: var(--font-text); font-size: 22px; font-weight: 700;
+                  padding: 18px 4px; border-bottom: 1px solid rgba(255,255,255,.55);
+                  display: flex; justify-content: space-between; align-items: center; }
+.break.yellow .rows li { border-bottom-color: rgba(32,33,36,.35); }
+.break .rows li:first-child { border-top: 1px solid rgba(255,255,255,.55); }
+.break.yellow .rows li:first-child { border-top-color: rgba(32,33,36,.35); }
+
+/* ---------- 6 · cards ---------- */
+.card { background: var(--white); border: 1px solid var(--hairline); border-radius: 16px;
+        padding: 24px 22px 22px; }
+.card .ico { height: 56px; display: flex; align-items: center; margin-bottom: 16px; }
+.card .ct  { font-size: 24px; font-weight: 500; }
+.card .cr  { height: 1px; background: var(--hairline); margin: 14px 0 16px; }
+.card .cb  { font-family: var(--font-text); font-size: 17px; line-height: 1.55; color: var(--ink-2); }
+.card ul   { list-style: none; }
+.card li   { font-family: var(--font-text); font-size: 17px; line-height: 1.5; color: var(--ink-2);
+             padding-left: 18px; position: relative; margin: 10px 0; }
+.card li::before { content: "•"; position: absolute; left: 0; color: var(--ink-3); }
+.card.hl   { border: 2px solid var(--blue); }
+.card .badge { position: absolute; top: -11px; right: 14px; background: var(--blue); color: #fff;
+               font-family: var(--font-text); font-size: 12px; font-weight: 700;
+               border-radius: 999px; padding: 3px 11px; }
+.figure { background: var(--white); border: 1px solid var(--hairline); border-radius: 16px;
+          padding: 18px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.figure img, .figure svg { max-width: 100%; max-height: 100%; display: block; }
+
+/* ---------- 7 · numbered items ---------- */
+.numbers .n  { font-size: 53px; font-weight: 500; color: var(--blue); line-height: 1; margin-bottom: 20px; }
+.numbers p   { font-family: var(--font-text); font-size: 21px; line-height: 1.55; }
+.numlist li  { list-style: none; display: grid; grid-template-columns: 128px 1fr; align-items: baseline;
+               margin-bottom: 34px; }
+.numlist .n  { font-size: 53px; font-weight: 500; color: var(--blue); }
+.numlist .t  { font-size: 53px; font-weight: 500; line-height: 1.08; }
+
+/* ---------- 8 · stats ---------- */
+.stat-hero  { font-size: 171px; font-weight: 500; color: var(--blue); line-height: .9; letter-spacing: -4px; }
+.stat-big   { font-size: 107px; font-weight: 500; color: var(--blue); line-height: 1; letter-spacing: -2px; }
+.stat-unit  { font-size: 32px; font-weight: 700; margin-top: 14px; }
+.stat-note  { font-family: var(--font-text); font-size: 32px; font-weight: 400; }
+.stat-row   { display: grid; grid-template-columns: auto 1fr; column-gap: 26px; align-items: center;
+              margin-bottom: 46px; }
+.stat-row .stat-big { text-align: right; }
+.stat-sm    { font-size: 32px; font-weight: 700; color: var(--blue); }
+.stat-sm + p { font-family: var(--font-text); font-size: 21px; color: var(--ink); margin-top: 4px; }
+
+/* ---------- 9 · tables ---------- */
+table.t { width: 100%; border-collapse: collapse; font-family: var(--font-text); font-size: 18px; }
+/* Table A — filled header, boxed cells */
+table.t.a thead th { background: var(--surface); text-align: left; font-weight: 700; padding: 15px 18px;
+                     border: 1px solid var(--hairline); }
+table.t.a tbody td { padding: 14px 18px; border: 1px solid var(--hairline); color: var(--ink); }
+/* Table B — rule-only, numeric */
+table.t.b thead th { text-align: right; font-weight: 700; padding: 12px 16px;
+                     border-bottom: 2px solid var(--ink); }
+table.t.b thead th:first-child { text-align: left; }
+table.t.b tbody td { text-align: right; padding: 12px 16px; border-bottom: 1px solid var(--hairline); }
+table.t.b tbody td:first-child { text-align: left; color: var(--blue); background: var(--surface); }
+table.t.b tbody tr.total td { font-weight: 700; color: var(--blue); border-bottom: 0; }
+table.t .ok { color: var(--green); font-weight: 700; }
+table.t .no { color: var(--red); font-weight: 700; }
+.fn { font-family: var(--font-text); font-size: 14px; color: var(--ink-2); margin-top: 18px; line-height: 1.6; }
+
+/* ---------- 10 · timeline ---------- */
+.tl { position: relative; height: 440px; margin-top: 40px; }
+.tl .axis { position: absolute; left: 0; right: 0; top: 218px; height: 1.5px; background: var(--ink); }
+.tl .axis::after { content: ""; position: absolute; right: -1px; top: -5px;
+                   border-left: 11px solid var(--ink); border-top: 6px solid transparent;
+                   border-bottom: 6px solid transparent; }
+.tl .ev { position: absolute; width: 230px; }
+.tl .ev .d { color: var(--blue); font-size: 26px; font-weight: 500; }
+.tl .ev .x { font-family: var(--font-text); font-size: 18px; color: var(--ink); margin-top: 8px; line-height: 1.45; }
+/* the leader drops from the event to the axis: up events end at y 178, down events
+   start at y 258, and the 40px leader closes the gap to the axis at 218 */
+.tl .ev::before { content: ""; position: absolute; left: 0; width: 1.5px; background: var(--ink); }
+.tl .ev.up { bottom: 262px; } .tl .ev.up::before { bottom: -40px; height: 40px; }
+.tl .ev.dn { top: 258px; }    .tl .ev.dn::before { top: -40px; height: 40px; }
+.tl .tick { position: absolute; top: 213px; width: 11px; height: 11px; border-radius: 50%;
+            background: #fff; border: 1.5px solid var(--ink); }
+
+/* ---------- 11 · bullets ---------- */
+ul.bul { list-style: none; }
+ul.bul li { font-family: var(--font-text); font-size: 21px; line-height: 1.6; margin: 20px 0;
+            padding-left: 30px; position: relative; }
+ul.bul li::before { content: "•"; position: absolute; left: 4px; top: -1px; color: var(--ink); }
+
+/* ---------- 12 · statement ---------- */
+.statement { align-items: center; }
+.statement .txt { font-size: 64px; font-weight: 500; line-height: 1.18; letter-spacing: -1.5px; max-width: 1000px; }
+.statement.dark { background: var(--ink); color: #fff; }
+.statement .em { color: var(--blue); }
+.statement.dark .em { color: var(--blue-300); }
+.statement .rule { width: 528px; height: 6px; background: var(--spectrum); margin-bottom: 34px; }
+
+/* ---------- 13 · quote ---------- */
+.quote { background: var(--ink); color: #fff; align-items: center; justify-content: center;
+         text-align: center; flex-direction: column; }
+.quote .mark { font-size: 150px; font-weight: 700; line-height: .7; margin-bottom: 30px; }
+.quote .txt  { font-size: 44px; font-weight: 500; line-height: 1.32; max-width: 960px; }
+.quote .who  { margin-top: 34px; font-family: var(--font-text); font-size: 22px; color: var(--blue-300); }
+.quote .who i { color: #fff; }
+
+/* ---------- 14 · full-bleed split (image or dark panel) ---------- */
+.split { padding: 0; }
+.split .panel { position: absolute; top: 0; bottom: 0; width: 500px; overflow: hidden; }
+.split .panel.left  { left: 0; }  .split .panel.right { right: 0; }
+.split .panel img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.split .panel.ink { background: var(--ink); }
+.split .txt { position: absolute; top: 50%; transform: translateY(-50%); width: 616px;
+              font-size: 42px; font-weight: 500; line-height: 1.25; letter-spacing: -1px; }
+.split .txt.at-right { left: 564px; } .split .txt.at-left { left: 64px; }
+
+/* ---------- 15 · full-width diagram ---------- */
+.diagram { width: 1152px; }
+.diagram svg { width: 100%; display: block; }
+
+/* ---------- 16 · thank you ---------- */
+.thanks { padding: 0; align-items: center; }
+.thanks .inner { padding: 0 64px; }
+.thanks h1 { font-size: 96px; font-weight: 500; letter-spacing: -2px; }
+.thanks .links { margin-top: 44px; font-family: var(--font-text); font-size: 21px;
+                 color: var(--ink-2); line-height: 1.9; }
+.thanks .links b { color: var(--ink); font-weight: 500; }
+.thanks .gclogo { position: absolute; left: 64px; bottom: 56px; font-size: 34px; }
+
+/* ---------- diagram animation ----------
+   Rules of the house, so these stay safe:
+   · The *still* is the finished picture. Motion only ever adds to it, so
+     stripping the animation (print, reduced motion) leaves a correct slide.
+   · Anything with no meaning at rest — playheads, packet dots — carries
+     opacity="0" in the markup and is raised by its own keyframes.
+   · Inactive slides are display:none, so every animation restarts from zero
+     the moment you page onto the slide. No nav-script hook needed. */
+
+/* 10 · both hops carry traffic in both directions, all the time */
+@keyframes s10-flow { from { stroke-dashoffset: 0; opacity: 1; }
+                      to   { stroke-dashoffset: -27; opacity: 1; } }
+.s10-flow { animation: s10-flow .75s linear infinite; }
+
+/* 6 · the chain works one stage at a time — that is the whole problem */
+@keyframes s06-stage {
+  0%,  22%  { fill: #FEF7E0; stroke: #FBBC05; stroke-width: 2; }
+  30%, 100% { fill: #FFFFFF; stroke: #DADCE0; stroke-width: 1.4; }
+}
+@keyframes s06-hop {
+  0%,  21%  { opacity: 0; transform: translateX(0); }
+  23%       { opacity: 1; transform: translateX(0); }
+  29%       { opacity: 1; transform: translateX(64px); }
+  31%, 100% { opacity: 0; transform: translateX(64px); }
+}
+.s06-stage     { animation: s06-stage 5s linear infinite; }
+.s06-hop       { animation: s06-hop 5s linear infinite; transform-box: view-box; }
+
+/* 7 · traffic runs both ways, continuously, on the one socket */
+@keyframes s07-flow { from { stroke-dashoffset: 0; opacity: 1; }
+                      to   { stroke-dashoffset: -72; opacity: 1; } }
+.s07-flow { animation: s07-flow 1.2s linear infinite; }
+
+/* 12 · a playhead crosses the session timeline; bars light as it reaches them */
+@keyframes s12-head {
+  0%   { opacity: 0; transform: translateX(0); }
+  3%   { opacity: 1; }
+  92%  { opacity: 1; transform: translateX(590px); }
+  100% { opacity: 0; transform: translateX(590px); }
+}
+@keyframes s12-s1 { 0%,1%{opacity:.16}  5%,33%{opacity:1} 41%,93%{opacity:.3} 100%{opacity:.16} }
+@keyframes s12-s2 { 0%,27%{opacity:.16} 32%,61%{opacity:1} 69%,93%{opacity:.3} 100%{opacity:.16} }
+@keyframes s12-s3 { 0%,56%{opacity:.16} 61%,93%{opacity:1} 100%{opacity:.16} }
+@keyframes s12-flow { from { stroke-dashoffset: 0; opacity: 1; }
+                      to   { stroke-dashoffset: -27; opacity: 1; } }
+.s12-head { animation: s12-head 8s linear infinite; transform-box: view-box; }
+.s12-s1   { animation: s12-s1 8s linear infinite; }
+.s12-s2   { animation: s12-s2 8s linear infinite; }
+.s12-s3   { animation: s12-s3 8s linear infinite; }
+.s12-flow { animation: s12-flow .75s linear infinite; }
+
+/* 13 · the handover, played out: old drains, replacement opens, mic never stops */
+@keyframes s13-head {
+  0%   { opacity: 0; transform: translateX(0); }
+  2%   { opacity: 1; }
+  94%  { opacity: 1; transform: translateX(1150px); }
+  100% { opacity: 0; transform: translateX(1150px); }
+}
+@keyframes s13-old { 0%,56%{opacity:1} 64%,100%{opacity:.45} }
+@keyframes s13-new { 0%,30%{opacity:0} 37%,100%{opacity:1} }
+@keyframes s13-mk1 { 0%,31%{stroke:#DADCE0} 34%,100%{stroke:#4285F4} }
+@keyframes s13-mk2 { 0%,57%{stroke:#DADCE0} 60%,100%{stroke:#4285F4} }
+@keyframes s13-mic { from { stroke-dashoffset: 0; opacity: 1; }
+                     to   { stroke-dashoffset: -72; opacity: 1; } }
+.s13-head { animation: s13-head 9s linear infinite; transform-box: view-box; }
+.s13-old  { animation: s13-old 9s linear infinite; }
+.s13-new  { animation: s13-new 9s linear infinite; }
+.s13-mk1  { animation: s13-mk1 9s linear infinite; }
+.s13-mk2  { animation: s13-mk2 9s linear infinite; }
+.s13-mic  { animation: s13-mic 1.6s linear infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; }
+}
+
+/* ---------- print / PDF export (Cmd-P → Save as PDF) ---------- */
+@media print {
+  * { animation: none !important; }
+  @page { size: 1280px 720px; margin: 0; }
+  html, body { background: #fff; overflow: visible; height: auto; }
+  #hud, #help, #notes { display: none !important; }
+  #stage { position: static; overflow: visible; }
+  #frame { position: static; transform: none !important; width: 1280px; height: auto;
+           box-shadow: none; }
+  .slide { position: relative !important; display: block !important; page-break-after: always;
+           break-after: page; }
+  .slide.flex { display: flex !important; }
+  .slide:last-child { page-break-after: auto; }
+}
+</style>
+</head>
+<body>
+
+<div id="stage"><div id="frame">
+
+<!-- ══════════════ 1 · COVER ══════════════ -->
+<section class="slide cover">
+  <svg class="art bleed" viewBox="0 0 620 620" aria-hidden="true">
+    <defs>
+      <linearGradient id="cover-arc" x1="0" y1="1" x2="1" y2="0">
+        <stop offset="0"   stop-color="#3185FF"/>
+        <stop offset=".38" stop-color="#06B08B"/>
+        <stop offset=".58" stop-color="#FFCF08"/>
+        <stop offset=".78" stop-color="#FF6230"/>
+        <stop offset="1"   stop-color="#FF5C8B"/>
+      </linearGradient>
+    </defs>
+    <path d="M40 580 A 400 400 0 0 1 440 180" fill="none" stroke="url(#cover-arc)" stroke-width="86" stroke-linecap="round"/>
+    <path d="M150 580 A 290 290 0 0 1 440 290" fill="none" stroke="#fff" stroke-width="86" stroke-linecap="round"/>
+  </svg>
+  <h1 class="disp">Real-time voice on the Live API</h1>
+  <div class="when">Live Translator, taken apart &nbsp;·&nbsp; August 2026</div>
+  <div class="gclogo"><span class="b">G</span><span class="r">o</span><span class="y">o</span><span class="b">g</span><span class="g">l</span><span class="r">e</span> <span class="w">Cloud</span></div>
+  <div class="notes">A working open-source app — <b>github.com/kazunori279/live-translator</b> — used as the worked example throughout. Everything in this deck is either in the Live API docs or was measured on that app in hour-long soak tests.</div>
+</section>
+
+<!-- ══════════════ 2 · SECTION 01 ══════════════ -->
+<section class="slide section">
+  <div class="spectrum"></div>
+  <div class="n">01</div>
+  <div class="name">The app</div>
+  <div class="kick">What it does, and the two ways it can do it.</div>
+  <div class="foot"><span class="gc">Google Cloud</span><span class="pageno"></span></div>
+  <div class="notes">Fifteen minutes, three parts: the app first so the rest has something to point at, then the API underneath it, then what an hour of real use taught us.</div>
+</section>
+
+<!-- ══════════════ 3 · FEATURES ══════════════ -->
+<section class="slide">
+  <div class="h">Two people, two languages, one laptop</div>
+  <div class="hsub">Live Translator is a browser page and a small Python server. You pick a language pair, hit start, and talk &mdash; it speaks the other side back out loud and puts both transcripts on screen.</div>
+  <div class="grid c3" style="margin-top:44px; row-gap:38px;">
+    <div>
+      <svg width="42" height="42" viewBox="0 0 48 48" fill="none" aria-hidden="true"><g stroke="#4285F4" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8a3 3 0 0 1 3-3h16a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3h-11l-8 6z"/><path d="M45 28a3 3 0 0 0-3-3H26a3 3 0 0 0-3 3v6a3 3 0 0 0 3 3h11l8 6z"/></g></svg>
+      <div class="ct" style="font-size:21px; margin-top:14px;">Conversation mode</div>
+      <div class="cb" style="margin-top:8px; font-family:var(--font-text); font-size:17px; line-height:1.55; color:var(--ink-2);">One interpreter, both directions. Speak either language and it answers in the other &mdash; 97 to choose from.</div>
+    </div>
+    <div>
+      <svg width="42" height="42" viewBox="0 0 48 48" fill="none" aria-hidden="true"><g stroke="#4285F4" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 10l10 14-10 14M24 10l10 14-10 14"/></g></svg>
+      <div class="ct" style="font-size:21px; margin-top:14px;">Simultaneous mode</div>
+      <div class="cb" style="margin-top:8px; font-family:var(--font-text); font-size:17px; line-height:1.55; color:var(--ink-2);">A translate-specialised model that starts speaking while you are still talking. Half a second behind, 78 languages.</div>
+    </div>
+    <div>
+      <svg width="42" height="42" viewBox="0 0 48 48" fill="none" aria-hidden="true"><g stroke="#4285F4" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h26a4 4 0 0 1 4 4v32l-8-6-8 6-8-6-6 4z"/><path d="M15 16h16M15 24h11"/></g></svg>
+      <div class="ct" style="font-size:21px; margin-top:14px;">Your own glossary</div>
+      <div class="cb" style="margin-top:8px; font-family:var(--font-text); font-size:17px; line-height:1.55; color:var(--ink-2);">A CSV of terms, steered into the model so it says them and rewritten into the captions so you read them.</div>
+    </div>
+    <div>
+      <svg width="42" height="42" viewBox="0 0 48 48" fill="none" aria-hidden="true"><g stroke="#4285F4" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="18" y="14" width="12" height="18" rx="6"/><path d="M12 28a12 12 0 0 0 24 0"/><path d="M24 40v5M17 45h14"/><path d="M24 2v9M19 6l5 5 5-5"/></g></svg>
+      <div class="ct" style="font-size:21px; margin-top:14px;">Push to talk</div>
+      <div class="cb" style="margin-top:8px; font-family:var(--font-text); font-size:17px; line-height:1.55; color:var(--ink-2);">Hold the button to send. The microphone stops at the client, so the rest of the room never reaches the model.</div>
+    </div>
+    <div>
+      <svg width="42" height="42" viewBox="0 0 48 48" fill="none" aria-hidden="true"><g stroke="#4285F4" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="42" height="28" rx="4"/><path d="M11 20h26M11 27h15"/><path d="M24 34v6M16 43h16"/></g></svg>
+      <div class="ct" style="font-size:21px; margin-top:14px;">Caption overlay</div>
+      <div class="cb" style="margin-top:8px; font-family:var(--font-text); font-size:17px; line-height:1.55; color:var(--ink-2);">A second window at <code>/caption</code> with nothing but the running text, sized for a projector behind the speaker.</div>
+    </div>
+    <div>
+      <svg width="42" height="42" viewBox="0 0 48 48" fill="none" aria-hidden="true"><g stroke="#4285F4" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M25 8L14 18H6v12h8l11 10z"/><path d="M33 18a9 9 0 0 1 0 12"/><path d="M39 12a17 17 0 0 1 0 24"/></g></svg>
+      <div class="ct" style="font-size:21px; margin-top:14px;">Voices and devices</div>
+      <div class="cb" style="margin-top:8px; font-family:var(--font-text); font-size:17px; line-height:1.55; color:var(--ink-2);">30 prebuilt voices, and ranked microphone and speaker preferences that survive a reload.</div>
+    </div>
+  </div>
+  <div class="foot"><span class="gc">Google Cloud</span><span class="pageno"></span></div>
+  <div class="notes">Worth demoing live if you can: the interesting moment is interrupting it mid-translation and watching it stop. That is the Live API&rsquo;s barge-in, not anything this app implements.<br><br>The glossary is two mechanisms wearing one name &mdash; it goes into the system instruction so the model <i>says</i> your term, and it runs a second pass over the transcript so the viewer <i>reads</i> it. The second pass is harder than it sounds: transcripts stream in fragments that split words down the middle, so the rewriter has to buffer across message boundaries before it can match a term at all.</div>
+</section>
+
+<!-- ══════════════ 4 · TWO CONFIGURATIONS ══════════════ -->
+<section class="slide">
+  <div class="h">One app, two model configurations</div>
+  <div class="hsub">Same app, same server. A mode is a different model and a different way of steering it.</div>
+  <table class="t a" style="margin-top:76px;">
+    <thead><tr><th style="width:210px">Mode</th><th>Model and steering</th><th style="width:330px">What you give up</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><svg width="26" height="26" viewBox="0 0 26 26" fill="none" aria-hidden="true" style="vertical-align:-7px;margin-right:10px"><g stroke="#4285F4" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2H6l-5 4z"/><path d="M25 16a2 2 0 0 0-2-2h-9a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h6l5 4z"/></g></svg><b>Conversation</b></td>
+        <td>gemini-3.1-flash-live-preview &mdash; bidirectional interpreter system instruction, glossary embedded both ways</td>
+        <td>~5.5 s from speech-end to a finished turn</td>
+      </tr>
+      <tr>
+        <td><svg width="26" height="26" viewBox="0 0 26 26" fill="none" aria-hidden="true" style="vertical-align:-7px;margin-right:10px"><g stroke="#4285F4" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5l8 8-8 8M14 5l8 8-8 8"/></g></svg><b>Simultaneous</b></td>
+        <td>gemini-3.5-live-translate-preview &mdash; <code>translationConfig</code> only, source language auto-detected</td>
+        <td>No prompt, no tools, no glossary steering</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="fn">The translate model accepts no system instruction, no tools and no function calling. Anything you would normally prompt for has to become a config field instead — <code>echoTargetLanguage</code> is that mode&rsquo;s entire echo policy.</div>
+  <div class="foot"><span class="gc">Google Cloud</span><span class="pageno"></span></div>
+  <div class="notes">The trade is stark and worth stating out loud: simultaneous answers in ~0.5 s because it emits while the speaker is still talking, but it cannot be told anything. Conversation waits for the turn to end, and in exchange you get 97 languages, a glossary, and an instruction the model actually follows.</div>
+</section>
+
+<!-- ══════════════ 5 · SECTION 02 ══════════════ -->
+<section class="slide section">
+  <div class="spectrum"></div>
+  <div class="n">02</div>
+  <div class="name">Gemini Live API</div>
+  <div class="kick">What is underneath it, and how this app uses it.</div>
+  <div class="foot"><span class="gc">Google Cloud</span><span class="pageno"></span></div>
+  <div class="notes">Everything in this section is in the public docs. The point of going through it is that the shape of the API decides the shape of your app &mdash; the next section is entirely consequences of what is on the next five slides.</div>
+</section>
+
+<!-- ══════════════ 6 · WHY NATIVE AUDIO ══════════════ -->
+<section class="slide">
+  <div class="h">The challenge &mdash; three models in a chain</div>
+  <div class="hsub">Real-time voice used to mean a chain: speech-to-text, then a text model, then text-to-speech. Every hop waits for a whole utterance before the next can start.</div>
+  <div class="diagram" style="margin-top:20px;">
+<svg viewBox="0 0 1152 384" width="100%" aria-label="Speech-to-text, a text model and text-to-speech chained in sequence, with the three costs of the chain listed underneath: latency, prosody and interruption">
+  <defs>
+    <marker id="s06-arw" markerWidth="9" markerHeight="9" refX="7.2" refY="3.2" orient="auto">
+      <path d="M0 0 L7.2 3.2 L0 6.4 z" fill="#5F6368"/>
+    </marker>
+  </defs>
+
+  <text x="0" y="100" font-family="Google Sans, Arial, sans-serif" font-size="14" font-weight="700" fill="#80868B">ONE UTTERANCE, THREE ROUND TRIPS</text>
+
+  <rect class="s06-stage" x="0" y="120" width="330" height="120" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1.4"/>
+  <g transform="translate(152,140)" stroke="#5F6368" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="8" y="1" width="10" height="15" rx="5"/>
+    <path d="M4 13a9 9 0 0 0 18 0"/>
+    <path d="M13 22v5"/>
+  </g>
+  <text x="165" y="196" text-anchor="middle" font-family="Google Sans, Arial, sans-serif" font-size="19" font-weight="500" fill="#202124">Speech-to-Text</text>
+  <text x="165" y="220" text-anchor="middle" font-family="Google Sans Text, Arial, sans-serif" font-size="14" fill="#5F6368">audio in, text out</text>
+
+  <path d="M336 180 H 403" stroke="#5F6368" stroke-width="1.8" fill="none" marker-end="url(#s06-arw)"/>
+  <circle class="s06-hop" cx="338" cy="180" r="4.5" fill="#FBBC05" opacity="0"/>
+  <text x="370" y="168" text-anchor="middle" font-family="Google Sans Text, Arial, sans-serif" font-size="13" fill="#80868B">text</text>
+
+  <rect class="s06-stage" style="animation-delay:1.6s" x="411" y="120" width="330" height="120" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1.4"/>
+  <g transform="translate(563,140)" stroke="#5F6368" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 1h11l7 7v18a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1z"/>
+    <path d="M15 1v7h7"/>
+    <path d="M7 14h11M7 20h8"/>
+  </g>
+  <text x="576" y="196" text-anchor="middle" font-family="Google Sans, Arial, sans-serif" font-size="19" font-weight="500" fill="#202124">A text model</text>
+  <text x="576" y="220" text-anchor="middle" font-family="Google Sans Text, Arial, sans-serif" font-size="14" fill="#5F6368">needs the whole sentence</text>
+
+  <path d="M747 180 H 814" stroke="#5F6368" stroke-width="1.8" fill="none" marker-end="url(#s06-arw)"/>
+  <circle class="s06-hop" style="animation-delay:1.6s" cx="749" cy="180" r="4.5" fill="#FBBC05" opacity="0"/>
+  <text x="781" y="168" text-anchor="middle" font-family="Google Sans Text, Arial, sans-serif" font-size="13" fill="#80868B">text</text>
+
+  <rect class="s06-stage" style="animation-delay:3.2s" x="822" y="120" width="330" height="120" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1.4"/>
+  <g transform="translate(974,140)" stroke="#5F6368" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M13 2l-7 6H2v10h4l7 6z"/>
+    <path d="M17 8a7 7 0 0 1 0 12"/>
+    <path d="M21 4a13 13 0 0 1 0 20"/>
+  </g>
+  <text x="987" y="196" text-anchor="middle" font-family="Google Sans, Arial, sans-serif" font-size="19" font-weight="500" fill="#202124">Text-to-Speech</text>
+  <text x="987" y="220" text-anchor="middle" font-family="Google Sans Text, Arial, sans-serif" font-size="14" fill="#5F6368">text in, audio out</text>
+
+  <g transform="translate(0,330)" stroke="#5F6368" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M1 1v22"/>
+    <path d="M4 5h7M4 12h13M4 19h19"/>
+  </g>
+  <text x="42" y="318" font-family="Google Sans, Arial, sans-serif" font-size="14" font-weight="700" fill="#80868B">LATENCY</text>
+  <text x="42" y="346" font-family="Google Sans Text, Arial, sans-serif" font-size="16" fill="#5F6368">Each hop waits for the last.</text>
+  <text x="42" y="370" font-family="Google Sans Text, Arial, sans-serif" font-size="16" fill="#5F6368">The delays stack, end to end.</text>
+
+  <g transform="translate(400,330)" stroke="#5F6368" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M1 12h2l2-8 3 16 3-12 2 7 2-3"/>
+    <path d="M15 12h9"/>
+  </g>
+  <text x="442" y="318" font-family="Google Sans, Arial, sans-serif" font-size="14" font-weight="700" fill="#80868B">PROSODY</text>
+  <text x="442" y="346" font-family="Google Sans Text, Arial, sans-serif" font-size="16" fill="#5F6368">Tone and timing become text.</text>
+  <text x="442" y="370" font-family="Google Sans Text, Arial, sans-serif" font-size="16" fill="#5F6368">Nothing carries them back.</text>
+
+  <g transform="translate(790,330)" stroke="#5F6368" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="11"/>
+    <path d="M4.2 19.8L19.8 4.2"/>
+  </g>
+  <text x="832" y="318" font-family="Google Sans, Arial, sans-serif" font-size="14" font-weight="700" fill="#80868B">INTERRUPTION</text>
+  <text x="832" y="346" font-family="Google Sans Text, Arial, sans-serif" font-size="16" fill="#5F6368">Nothing listens while it talks.</text>
+  <text x="832" y="370" font-family="Google Sans Text, Arial, sans-serif" font-size="16" fill="#5F6368">You wait for the turn to end.</text>
+</svg>
+  </div>
+  <div class="foot"><span class="gc">Google Cloud</span><span class="pageno"></span></div>
+  <div class="notes">This is how nearly every voice assistant was built until recently, and it is still the right shape for plenty of things &mdash; it is just the wrong shape for a conversation. Each box is a separate model with its own turn boundary, so the round trip cannot start until the one before it has finished a whole utterance.<br><br>The killer is not the raw milliseconds, it is the second box: a text model needs a complete sentence before it can begin. That single constraint is what forces the pause, and it is what the next slide removes.</div>
+</section>
+
+<!-- ══════════════ 7 · WHAT YOU CONNECT TO ══════════════ -->
+<section class="slide">
+  <div class="h">The solution &mdash; one native-audio model</div>
+  <div class="hsub">Gemini Live API replaces the chain with one speech-native model on one open connection &mdash; a setup frame, then audio in both directions until someone hangs up.</div>
+  <div class="diagram" style="margin-top:20px;">
+<svg viewBox="0 0 1152 384" width="100%" aria-label="A single WebSocket between your app and a Live API session, carrying setup and audio upstream and audio, transcriptions and control messages downstream">
+  <defs>
+    <marker id="s07-arw" markerWidth="9" markerHeight="9" refX="7.2" refY="3.2" orient="auto">
+      <path d="M0 0 L7.2 3.2 L0 6.4 z" fill="#5F6368"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="120" width="210" height="120" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1.4"/>
+  <g transform="translate(88,142)" stroke="#5F6368" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="0" y="0" width="34" height="24" rx="3"/>
+    <path d="M0 7h34"/>
+    <path d="M4.5 3.5h0.01M9 3.5h0.01"/>
+  </g>
+  <text x="105" y="190" text-anchor="middle" font-family="Google Sans, Arial, sans-serif" font-size="19" font-weight="500" fill="#202124">Your app</text>
+  <text x="105" y="214" text-anchor="middle" font-family="Google Sans Text, Arial, sans-serif" font-size="14" fill="#5F6368">browser or backend</text>
+
+  <path d="M210 180 H 240" stroke="#DADCE0" stroke-width="1.8" fill="none"/>
+
+  <rect x="240" y="96" width="672" height="168" rx="10" fill="#F8F9FA" stroke="#DADCE0" stroke-width="1.4"/>
+  <text x="576" y="126" text-anchor="middle" font-family="Google Sans, Arial, sans-serif" font-size="14" font-weight="700" fill="#80868B">ONE WEBSOCKET, HELD OPEN</text>
+
+  <text x="576" y="160" text-anchor="middle" font-family="Google Sans Text, Arial, sans-serif" font-size="15" fill="#5F6368">setup &nbsp;·&nbsp; realtime audio blobs &nbsp;·&nbsp; activity signals</text>
+  <path d="M272 176 H 880" stroke="#5F6368" stroke-width="1.8" fill="none" marker-end="url(#s07-arw)"/>
+  <path class="s07-flow" d="M276 176 H 872" stroke="#4285F4" stroke-width="5" stroke-linecap="round" stroke-dasharray="0 72" fill="none" opacity="0"/>
+
+  <path d="M880 220 H 272" stroke="#5F6368" stroke-width="1.8" fill="none" marker-end="url(#s07-arw)"/>
+  <path class="s07-flow" style="animation-delay:-.6s" d="M876 220 H 280" stroke="#4285F4" stroke-width="5" stroke-linecap="round" stroke-dasharray="0 72" fill="none" opacity="0"/>
+  <text x="576" y="248" text-anchor="middle" font-family="Google Sans Text, Arial, sans-serif" font-size="15" fill="#5F6368">audio chunks &nbsp;·&nbsp; transcriptions &nbsp;·&nbsp; turnComplete &nbsp;·&nbsp; goAway</text>
+
+  <path d="M912 180 H 942" stroke="#DADCE0" stroke-width="1.8" fill="none"/>
+
+  <rect x="942" y="120" width="210" height="120" rx="10" fill="#E8F0FE" stroke="#4285F4" stroke-width="2"/>
+  <g transform="translate(1035,142)" stroke="#4285F4" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M1 1h22M1 23h22"/>
+    <path d="M4 1v4l8 7-8 7v4"/>
+    <path d="M20 1v4l-8 7 8 7v4"/>
+  </g>
+  <text x="1047" y="190" text-anchor="middle" font-family="Google Sans, Arial, sans-serif" font-size="19" font-weight="500" fill="#174EA6">Live session</text>
+  <text x="1047" y="214" text-anchor="middle" font-family="Google Sans Text, Arial, sans-serif" font-size="14" fill="#174EA6">stateful, and finite</text>
+
+  <g transform="translate(0,330)" stroke="#4285F4" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M1 5h6M13 5h10M1 12h11M18 12h5M1 19h3M10 19h13"/>
+    <circle cx="10" cy="5" r="2.6"/><circle cx="15" cy="12" r="2.6"/><circle cx="7" cy="19" r="2.6"/>
+  </g>
+  <text x="42" y="318" font-family="Google Sans, Arial, sans-serif" font-size="14" font-weight="700" fill="#4285F4">SETUP</text>
+  <text x="42" y="346" font-family="Google Sans Text, Arial, sans-serif" font-size="16" fill="#5F6368">One config, sent first.</text>
+  <text x="42" y="370" font-family="Google Sans Text, Arial, sans-serif" font-size="16" fill="#5F6368">It cannot change afterwards.</text>
+
+  <g transform="translate(400,330)" stroke="#4285F4" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <ellipse cx="12" cy="4" rx="10" ry="3.4"/>
+    <path d="M2 4v7c0 1.9 4.5 3.4 10 3.4s10-1.5 10-3.4V4"/>
+    <path d="M2 11v7c0 1.9 4.5 3.4 10 3.4s10-1.5 10-3.4v-7"/>
+  </g>
+  <text x="442" y="318" font-family="Google Sans, Arial, sans-serif" font-size="14" font-weight="700" fill="#4285F4">STATE</text>
+  <text x="442" y="346" font-family="Google Sans Text, Arial, sans-serif" font-size="16" fill="#5F6368">The session holds the history.</text>
+  <text x="442" y="370" font-family="Google Sans Text, Arial, sans-serif" font-size="16" fill="#5F6368">You never resend the context.</text>
+
+  <g transform="translate(790,330)" stroke="#4285F4" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="13" r="10"/>
+    <path d="M12 7v6l4 2.5"/>
+    <path d="M8 1h8"/>
+  </g>
+  <text x="832" y="318" font-family="Google Sans, Arial, sans-serif" font-size="14" font-weight="700" fill="#4285F4">LIFETIME</text>
+  <text x="832" y="346" font-family="Google Sans Text, Arial, sans-serif" font-size="16" fill="#5F6368">Audio-only caps near 15 min.</text>
+  <text x="832" y="370" font-family="Google Sans Text, Arial, sans-serif" font-size="16" fill="#5F6368">goAway warns before the close.</text>
+</svg>
+  </div>
+  <div class="foot"><span class="gc">Google Cloud</span><span class="pageno"></span></div>
+  <div class="notes">VAD is tunable — <b>startOfSpeechSensitivity</b>, <b>endOfSpeechSensitivity</b>, <b>prefixPaddingMs</b>, <b>silenceDurationMs</b> — or you can switch to manual turn control with <b>activityStart</b> / <b>activityEnd</b>. Live Translator&rsquo;s push-to-talk button is a client-side variant: it stops sending frames rather than signalling activity.</div>
+</section>
+
+<!-- ══════════════ 8 · LIVE API INTRO ══════════════ -->
+<section class="slide">
+  <div class="h">What the open connection gives you</div>
+  <div class="hsub">The Gemini Live API is a speech-native model you hold a connection to. Not a request and a response &mdash; a session that stays open while both sides talk.</div>
+  <div class="grid c3" style="margin-top:40px;">
+    <div class="card">
+      <div class="ico"><svg width="48" height="48" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+        <g stroke="#4285F4" stroke-width="2.5" stroke-linecap="round">
+          <path d="M3 19v10M11 12v24M19 4v40M27 14v20M35 9v30M43 20v8"/>
+        </g>
+      </svg></div>
+      <div class="ct">Native audio, both ways</div><div class="cr"></div>
+      <div class="cb">16-bit PCM up at 16 kHz, down at 24 kHz. Nothing is flattened to text in the middle, so tone, pace and interruption survive. Transcripts are one config field away.</div>
+    </div>
+    <div class="card">
+      <div class="ico"><svg width="48" height="48" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+        <g stroke="#4285F4" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 15h38M34 7l8 8-8 8"/>
+          <path d="M44 33H6M14 25l-8 8 8 8"/>
+        </g>
+      </svg></div>
+      <div class="ct">The model runs the turn</div><div class="cr"></div>
+      <div class="cb">Server-side voice activity detection decides when you stopped speaking, and barge-in cancels a reply in flight. Or take manual control with <code>activityStart</code> and <code>activityEnd</code>.</div>
+    </div>
+    <div class="card">
+      <div class="ico"><svg width="48" height="48" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+        <g stroke="#4285F4" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="24" cy="24" r="20"/>
+          <path d="M4 24h40"/>
+          <ellipse cx="24" cy="24" rx="9" ry="20"/>
+        </g>
+      </svg></div>
+      <div class="ct">Reach, and tools</div><div class="cr"></div>
+      <div class="cb">97 languages and 30 prebuilt voices. Function calling, code execution and Search grounding all work mid-conversation, without dropping the call.</div>
+    </div>
+  </div>
+  <div class="cap" style="margin-top:22px; max-width:1152px;">Two front doors, one wire protocol. <b>Gemini API</b> takes an API key, or an ephemeral token straight from the browser, and is the shortest path to something that talks back. <b>Gemini Enterprise Agent Platform</b> adds IAM, VPC-SC, data residency and regional endpoints. Porting between them is an auth change, not a rewrite.</div>
+  <div class="foot"><span class="gc">Google Cloud</span><span class="pageno"></span></div>
+  <div class="notes">Agent Platform is the product formerly known as Vertex AI; the console menus and docs moved in 2026. Same <b>LiveConnectConfig</b>, same message shapes; the Gen AI SDK picks between them from <b>GOOGLE_GENAI_USE_VERTEXAI</b>.<br><br>One gotcha worth naming out loud: Live Translator <i>clears</i> <b>GOOGLE_GENAI_USE_VERTEXAI</b> at import time to pin itself to the API-key route. If you inherit that variable from your environment and don&rsquo;t notice, you will spend an afternoon wondering why your Vertex quota looks idle.<br><br>Transcription deserves a sentence: asking for it costs no extra latency, because the model emits it alongside the audio it is already generating. That is what lets a translation app speak <i>and</i> caption from a single pass.</div>
+</section>
+
+<!-- ══════════════ 9 · BEYOND AUDIO ══════════════ -->
+<section class="slide">
+  <div class="h">Audio is where we stopped, not where it stops</div>
+  <div class="hsub">Live Translator uses one modality and a fraction of what a session offers. The same socket, unchanged, carries the rest.</div>
+  <div class="grid c3" style="margin-top:40px;">
+    <div class="card">
+      <svg class="ico" width="46" height="46" viewBox="0 0 48 48" fill="none" aria-hidden="true"><g stroke="#4285F4" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="12" width="28" height="22" rx="4"/><path d="M31 20l13-7v20l-13-7z"/><circle cx="12" cy="23" r="4"/></g></svg>
+      <div class="ct">Video on the same socket</div>
+      <div class="cb">One frame per second at 768&times;768, interleaved with the audio. The user shows you the leaking valve instead of describing it &mdash; no second channel, no second connection.</div>
+    </div>
+    <div class="card">
+      <svg class="ico" width="46" height="46" viewBox="0 0 48 48" fill="none" aria-hidden="true"><g stroke="#34A853" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="19" cy="24" r="15"/><path d="M14 20h.01M25 20h.01"/><path d="M13 29a9 9 0 0 0 13 0"/><path d="M38 17a13 13 0 0 1 0 14"/><path d="M43 12a20 20 0 0 1 0 24"/></g></svg>
+      <div class="ct">It hears how you said it</div>
+      <div class="cb">Native-audio models add affective dialog, where tone and mood shape the reply, and proactive audio, where the model decides to speak up instead of waiting to be addressed.</div>
+    </div>
+    <div class="card">
+      <svg class="ico" width="46" height="46" viewBox="0 0 48 48" fill="none" aria-hidden="true"><g stroke="#FBBC05" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M24 24c4-7 7-10 12-10a10 10 0 0 1 0 20c-5 0-8-3-12-10z"/><path d="M24 24c-4 7-7 10-12 10a10 10 0 0 1 0-20c5 0 8 3 12 10z"/></g></svg>
+      <div class="ct">Past the fifteen minutes</div>
+      <div class="cb">Context window compression trims the oldest turns and lifts the duration cap. Session resumption hands back a token that restores history after a dropped connection.</div>
+    </div>
+  </div>
+  <div class="cap" style="margin-top:22px; max-width:1152px;">None of these is a rewrite &mdash; each is a field in the same <b>LiveConnectConfig</b>. The application shapes follow from there: a support agent watching a customer&rsquo;s camera, a field technician on smart glasses working hands-free, a shopper holding a garment up to the webcam.</div>
+  <div class="foot"><span class="gc">Google Cloud</span><span class="pageno"></span></div>
+  <div class="notes">Live Translator uses none of these three, which is exactly why they are worth showing: the ceiling is a long way above one app&rsquo;s use of it.<br><br>A caveat on the third card. Live Translator deliberately does <i>not</i> use session resumption. Resuming replays the tail of the conversation, and an off-by-one in what got re-delivered cascaded into duplicated audio; replacing the session outright measured far better &mdash; 98% turn completion against 65%. Compression and resumption are the right tools for an assistant that has to remember. They were the wrong tools for an interpreter that only has to keep up.<br><br>1 fps at 768&times;768 is the documented recommendation, not a hard ceiling. Proactive audio and affective dialog are native-audio-model features and are not available on every Live model &mdash; check the model card before you promise them.</div>
+</section>
+
+<!-- ══════════════ 10 · ARCHITECTURE ══════════════ -->
+<section class="slide">
+  <div class="h">How this app holds that socket</div>
+  <div class="hsub">Three files, one relay. The browser captures and plays, and does nothing else. Every decision &mdash; session lifetime, the system instruction, the API key &mdash; stays server-side.</div>
+  <div class="diagram" style="margin-top:24px;">
+<svg viewBox="0 0 1152 376" width="100%" aria-label="Three panels: the browser JavaScript client, the FastAPI relay, and the Gemini Live API, with the files and functions in each and the WebSocket between them">
+  <defs>
+    <marker id="s10-arw" markerWidth="9" markerHeight="9" refX="7.2" refY="3.2" orient="auto">
+      <path d="M0 0 L7.2 3.2 L0 6.4 z" fill="#5F6368"/>
+    </marker>
+  </defs>
+
+  <!-- ── browser ── -->
+  <g stroke="#80868B" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="0" y="1" width="20" height="15" rx="2"/><path d="M0 5.5h20"/><path d="M3 3.2h.01M6 3.2h.01"/>
+  </g>
+  <text x="28" y="14" font-family="Google Sans, Arial, sans-serif" font-size="14" font-weight="700" fill="#80868B">BROWSER &nbsp;·&nbsp; app/static/js</text>
+  <rect x="0" y="26" width="330" height="222" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1.4"/>
+
+  <rect x="14" y="42" width="302" height="58" rx="8" fill="#F8F9FA" stroke="#DADCE0" stroke-width="1.4"/>
+  <text x="26" y="67" font-family="Google Sans, Arial, sans-serif" font-size="16" font-weight="500" fill="#202124">audio-recorder.js</text>
+  <text x="26" y="87" font-family="Google Sans Text, Arial, sans-serif" font-size="13" fill="#5F6368">16 kHz capture &nbsp;·&nbsp; Float32 &rarr; Int16 PCM</text>
+
+  <rect x="14" y="108" width="302" height="58" rx="8" fill="#F8F9FA" stroke="#DADCE0" stroke-width="1.4"/>
+  <text x="26" y="133" font-family="Google Sans, Arial, sans-serif" font-size="16" font-weight="500" fill="#202124">app.js</text>
+  <text x="26" y="153" font-family="Google Sans Text, Arial, sans-serif" font-size="13" fill="#5F6368">WebSocket &nbsp;·&nbsp; setup frame &nbsp;·&nbsp; captions</text>
+
+  <rect x="14" y="174" width="302" height="58" rx="8" fill="#F8F9FA" stroke="#DADCE0" stroke-width="1.4"/>
+  <text x="26" y="199" font-family="Google Sans, Arial, sans-serif" font-size="16" font-weight="500" fill="#202124">audio-player.js</text>
+  <text x="26" y="219" font-family="Google Sans Text, Arial, sans-serif" font-size="13" fill="#5F6368">24 kHz playback &nbsp;·&nbsp; setSinkId routing</text>
+
+  <!-- ── browser ↔ relay ── -->
+  <path d="M336 110 H 390" stroke="#5F6368" stroke-width="1.8" fill="none" marker-end="url(#s10-arw)"/>
+  <path class="s10-flow" d="M337 110 H 387" stroke="#4285F4" stroke-width="5" stroke-linecap="round" stroke-dasharray="0 27" fill="none" opacity="0"/>
+  <path d="M390 168 H 336" stroke="#5F6368" stroke-width="1.8" fill="none" marker-end="url(#s10-arw)"/>
+  <path class="s10-flow" style="animation-delay:-.37s" d="M387 168 H 337" stroke="#4285F4" stroke-width="5" stroke-linecap="round" stroke-dasharray="0 27" fill="none" opacity="0"/>
+
+  <!-- ── relay ── -->
+  <g transform="translate(0,0)" stroke="#4285F4" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="397" y="1" width="20" height="6.6" rx="1.6"/>
+    <rect x="397" y="10.4" width="20" height="6.6" rx="1.6"/>
+    <path d="M401 4.3h.01M401 13.7h.01"/>
+  </g>
+  <text x="424" y="14" font-family="Google Sans, Arial, sans-serif" font-size="14" font-weight="700" fill="#4285F4">FASTAPI RELAY &nbsp;·&nbsp; app/main.py</text>
+  <rect x="396" y="26" width="356" height="222" rx="10" fill="#E8F0FE" stroke="#4285F4" stroke-width="2"/>
+
+  <rect x="410" y="42" width="328" height="58" rx="8" fill="#FFFFFF" stroke="#4285F4" stroke-width="1.4"/>
+  <text x="424" y="67" font-family="Google Sans, Arial, sans-serif" font-size="16" font-weight="500" fill="#174EA6">WS /ws/{user}/{session}</text>
+  <text x="424" y="87" font-family="Google Sans Text, Arial, sans-serif" font-size="13" fill="#5F6368">?source &nbsp;·&nbsp; target &nbsp;·&nbsp; simul &nbsp;·&nbsp; convo</text>
+
+  <rect x="410" y="108" width="328" height="58" rx="8" fill="#FFFFFF" stroke="#4285F4" stroke-width="1.4"/>
+  <text x="424" y="133" font-family="Google Sans, Arial, sans-serif" font-size="16" font-weight="500" fill="#174EA6">upstream_task()</text>
+  <text x="424" y="153" font-family="Google Sans Text, Arial, sans-serif" font-size="13" fill="#5F6368">browser PCM &rarr; whichever session is current</text>
+
+  <rect x="410" y="174" width="328" height="58" rx="8" fill="#FFFFFF" stroke="#4285F4" stroke-width="1.4"/>
+  <text x="424" y="199" font-family="Google Sans, Arial, sans-serif" font-size="16" font-weight="500" fill="#174EA6">session_loop()</text>
+  <text x="424" y="219" font-family="Google Sans Text, Arial, sans-serif" font-size="13" fill="#5F6368">model messages &rarr; _envelope_from() &rarr; JSON</text>
+
+  <!-- ── relay ↔ model ── -->
+  <path d="M758 110 H 812" stroke="#5F6368" stroke-width="1.8" fill="none" marker-end="url(#s10-arw)"/>
+  <path class="s10-flow" style="animation-delay:-.19s" d="M759 110 H 809" stroke="#4285F4" stroke-width="5" stroke-linecap="round" stroke-dasharray="0 27" fill="none" opacity="0"/>
+  <path d="M812 168 H 758" stroke="#5F6368" stroke-width="1.8" fill="none" marker-end="url(#s10-arw)"/>
+  <path class="s10-flow" style="animation-delay:-.56s" d="M809 168 H 759" stroke="#4285F4" stroke-width="5" stroke-linecap="round" stroke-dasharray="0 27" fill="none" opacity="0"/>
+
+  <!-- ── model ── -->
+  <g stroke="#34A853" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M828 0c0 5-4 9-9 9 5 0 9 4 9 9 0-5 4-9 9-9-5 0-9-4-9-9z"/>
+  </g>
+  <text x="844" y="14" font-family="Google Sans, Arial, sans-serif" font-size="14" font-weight="700" fill="#34A853">GEMINI LIVE API &nbsp;·&nbsp; Gen AI SDK</text>
+  <rect x="818" y="26" width="334" height="222" rx="10" fill="#E6F4EA" stroke="#34A853" stroke-width="2"/>
+
+  <rect x="832" y="42" width="306" height="58" rx="8" fill="#FFFFFF" stroke="#34A853" stroke-width="1.4"/>
+  <text x="846" y="67" font-family="Google Sans, Arial, sans-serif" font-size="16" font-weight="500" fill="#0D652D">LiveConnectConfig</text>
+  <text x="846" y="87" font-family="Google Sans Text, Arial, sans-serif" font-size="13" fill="#5F6368">model &nbsp;·&nbsp; voice &nbsp;·&nbsp; transcription</text>
+
+  <rect x="832" y="108" width="306" height="58" rx="8" fill="#FFFFFF" stroke="#34A853" stroke-width="1.4"/>
+  <text x="846" y="133" font-family="Google Sans, Arial, sans-serif" font-size="16" font-weight="500" fill="#0D652D">send_realtime_input()</text>
+  <text x="846" y="153" font-family="Google Sans Text, Arial, sans-serif" font-size="13" fill="#5F6368">Blob(audio/pcm;rate=16000)</text>
+
+  <rect x="832" y="174" width="306" height="58" rx="8" fill="#FFFFFF" stroke="#34A853" stroke-width="1.4"/>
+  <text x="846" y="199" font-family="Google Sans, Arial, sans-serif" font-size="16" font-weight="500" fill="#0D652D">receive()</text>
+  <text x="846" y="219" font-family="Google Sans Text, Arial, sans-serif" font-size="13" fill="#5F6368">audio &nbsp;·&nbsp; transcripts &nbsp;·&nbsp; turnComplete</text>
+
+  <path d="M0 274 H 1152" stroke="#DADCE0" stroke-width="1.4"/>
+
+  <text x="0" y="304" font-family="Google Sans, Arial, sans-serif" font-size="14" font-weight="700" fill="#4285F4">BROWSER &harr; RELAY</text>
+  <text x="0" y="330" font-family="Google Sans Text, Arial, sans-serif" font-size="15" fill="#5F6368">One WebSocket per tab. Up: a JSON setup frame carrying the glossary</text>
+  <text x="0" y="352" font-family="Google Sans Text, Arial, sans-serif" font-size="15" fill="#5F6368">and the voice, then raw PCM. Down: camelCase JSON envelopes.</text>
+
+  <text x="600" y="304" font-family="Google Sans, Arial, sans-serif" font-size="14" font-weight="700" fill="#34A853">RELAY &harr; MODEL</text>
+  <text x="600" y="330" font-family="Google Sans Text, Arial, sans-serif" font-size="15" fill="#5F6368">The SDK&rsquo;s own socket, opened per session. Every LiveServerMessage</text>
+  <text x="600" y="352" font-family="Google Sans Text, Arial, sans-serif" font-size="15" fill="#5F6368">is reshaped by <tspan font-family="ui-monospace, Menlo, monospace">_envelope_from()</tspan> before the browser sees it.</text>
+</svg>
+  </div>
+  <div class="foot"><span class="gc">Google Cloud</span><span class="pageno"></span></div>
+  <div class="notes">Both audio paths are AudioWorklets, not <b>ScriptProcessorNode</b> &mdash; capture runs in an <b>AudioContext</b> pinned to 16 kHz and playback in a separate one pinned to 24 kHz, because the Live API&rsquo;s two rates are different and resampling in JavaScript is not worth it. The recorder converts Float32 to Int16 by multiplying by <b>0x7fff</b>; that one line is the whole codec.<br><br>The two coroutines are the design: <b>upstream_task</b> only ever writes to <i>whichever</i> session is current, and <b>session_loop</b> owns opening and retiring sessions. Neither knows about the other&rsquo;s timing, which is what makes the session handover in section 03 tractable.<br><br>Why a relay at all, when client-to-server is lower latency? The system instruction and glossary stay server-side, session churn stops being the client&rsquo;s problem, and the API key never leaves the container.</div>
+</section>
+
+<!-- ══════════════ 11 · SECTION 03 ══════════════ -->
+<section class="slide section">
+  <div class="spectrum"></div>
+  <div class="n">03</div>
+  <div class="name">In production</div>
+  <div class="kick">What an hour of real use does to a live session.</div>
+  <div class="foot"><span class="gc">Google Cloud</span><span class="pageno"></span></div>
+  <div class="notes">None of this shows up in a demo. It shows up within the first ten minutes of a real conversation, and it was found by soak-testing rather than by reading.</div>
+</section>
+
+<!-- ══════════════ 12 · RELAY SHAPE ══════════════ -->
+<section class="slide">
+  <div class="h">One client socket, many model sessions</div>
+  <div class="hsub">Audio-only Live sessions cap out at 15 minutes. The user&rsquo;s browser tab doesn&rsquo;t.</div>
+  <div class="diagram" style="margin-top:36px;">
+<svg viewBox="0 0 1152 384" width="100%" aria-label="A browser streaming audio to a FastAPI relay, which opens a succession of overlapping upstream Live sessions on one timeline">
+  <defs>
+    <marker id="s12-arw" markerWidth="9" markerHeight="9" refX="7.2" refY="3.2" orient="auto">
+      <path d="M0 0 L7.2 3.2 L0 6.4 z" fill="#5F6368"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="92" width="190" height="100" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1.4"/>
+  <g transform="translate(78,106)" stroke="#5F6368" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="2" y="0" width="8" height="12" rx="4"/>
+    <path d="M0 9a6 6 0 0 0 12 0"/>
+    <path d="M6 15v5"/>
+    <path d="M29 2l-5 4h-3v8h3l5 4z"/>
+    <path d="M33 6a6 6 0 0 1 0 8"/>
+  </g>
+  <text x="95" y="152" text-anchor="middle" font-family="Google Sans, Arial, sans-serif" font-size="19" font-weight="500" fill="#202124">Browser</text>
+  <text x="95" y="176" text-anchor="middle" font-family="Google Sans Text, Arial, sans-serif" font-size="14" fill="#5F6368">mic + player</text>
+
+  <path d="M198 142 H 252" stroke="#5F6368" stroke-width="1.8" fill="none" marker-end="url(#s12-arw)"/>
+  <path class="s12-flow" d="M200 142 H 245" stroke="#4285F4" stroke-width="5" stroke-linecap="round" stroke-dasharray="0 27" fill="none" opacity="0"/>
+  <text x="225" y="130" text-anchor="middle" font-family="Google Sans Text, Arial, sans-serif" font-size="13" fill="#80868B">PCM</text>
+
+  <rect x="260" y="92" width="230" height="100" rx="10" fill="#E8F0FE" stroke="#4285F4" stroke-width="2"/>
+  <g transform="translate(358,106)" stroke="#4285F4" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M7 9.5L27 3M7 11h20M7 12.5l20 6.5"/>
+    <circle cx="4" cy="11" r="3.2"/>
+    <circle cx="30" cy="2" r="3.2"/>
+    <circle cx="30" cy="11" r="3.2"/>
+    <circle cx="30" cy="20" r="3.2"/>
+  </g>
+  <text x="375" y="152" text-anchor="middle" font-family="Google Sans, Arial, sans-serif" font-size="19" font-weight="500" fill="#174EA6">FastAPI relay</text>
+  <text x="375" y="176" text-anchor="middle" font-family="Google Sans Text, Arial, sans-serif" font-size="14" fill="#174EA6">one WebSocket per tab</text>
+
+  <path d="M498 142 H 552" stroke="#5F6368" stroke-width="1.8" fill="none" marker-end="url(#s12-arw)"/>
+  <path class="s12-flow" style="animation-delay:-.37s" d="M500 142 H 545" stroke="#4285F4" stroke-width="5" stroke-linecap="round" stroke-dasharray="0 27" fill="none" opacity="0"/>
+
+  <text x="560" y="28" font-family="Google Sans, Arial, sans-serif" font-size="14" font-weight="700" fill="#80868B">UPSTREAM LIVE SESSIONS</text>
+
+  <g class="s12-s1">
+    <rect x="560" y="42" width="200" height="46" rx="5" fill="#E8F0FE" stroke="#4285F4" stroke-width="2"/>
+    <text x="660" y="71" text-anchor="middle" font-family="Google Sans, Arial, sans-serif" font-size="16" font-weight="500" fill="#174EA6">session 1</text>
+  </g>
+
+  <g class="s12-s2">
+    <rect x="730" y="106" width="200" height="46" rx="5" fill="#E8F0FE" stroke="#4285F4" stroke-width="2"/>
+    <text x="830" y="135" text-anchor="middle" font-family="Google Sans, Arial, sans-serif" font-size="16" font-weight="500" fill="#174EA6">session 2</text>
+  </g>
+
+  <g class="s12-s3">
+    <rect x="900" y="170" width="200" height="46" rx="5" fill="#E8F0FE" stroke="#4285F4" stroke-width="2"/>
+    <text x="1000" y="199" text-anchor="middle" font-family="Google Sans, Arial, sans-serif" font-size="16" font-weight="500" fill="#174EA6">session 3</text>
+  </g>
+
+  <path class="s12-head" d="M561 32 V 262" stroke="#4285F4" stroke-width="1.6" fill="none" opacity="0"/>
+
+  <text x="560" y="246" font-family="Google Sans Text, Arial, sans-serif" font-size="14" fill="#80868B">Each bar overlaps the next — the replacement opens before the old one ends.</text>
+
+  <path d="M560 268 H 1152" stroke="#DADCE0" stroke-width="1.4"/>
+  <path d="M560 263 V 273 M730 263 V 273 M900 263 V 273" stroke="#DADCE0" stroke-width="1.4"/>
+  <text x="560" y="292" font-family="Google Sans Text, Arial, sans-serif" font-size="13" fill="#80868B">0</text>
+  <text x="730" y="292" font-family="Google Sans Text, Arial, sans-serif" font-size="13" fill="#80868B">~9 min</text>
+  <text x="900" y="292" font-family="Google Sans Text, Arial, sans-serif" font-size="13" fill="#80868B">~18 min</text>
+
+  <text x="0" y="336" font-family="Google Sans Text, Arial, sans-serif" font-size="16" fill="#5F6368">The browser socket never closes. Underneath it, sessions open, expire and are replaced.</text>
+  <text x="0" y="362" font-family="Google Sans Text, Arial, sans-serif" font-size="16" fill="#5F6368">Every new session starts with an empty history — resumption was removed on purpose.</text>
+</svg>
+  </div>
+  <div class="foot"><span class="gc">Google Cloud</span><span class="pageno"></span></div>
+  <div class="notes">Why relay at all, when client-to-server is lower latency? Three reasons here: the system instruction and glossary stay server-side, session churn stops being the client&rsquo;s problem, and the API key never leaves the container. If you go client-direct, use ephemeral tokens — and note they can pin <b>translationConfig</b> so the user can&rsquo;t retarget the language.<br><br>Session resumption <i>is</i> offered by the API (handles valid 2 hours). It was removed from this app because it caused an off-by-one cascade — the model prepending the previous turn&rsquo;s translation. 98% pass rate without it, 65% with.</div>
+</section>
+
+<!-- ══════════════ 13 · GOAWAY ══════════════ -->
+<section class="slide">
+  <div class="h">GoAway gives you fifty seconds</div>
+  <div class="hsub">Observed every ~9 minutes, always with <code>time_left=50s</code>. What you do with the notice decides whether the listener hears the seam.</div>
+  <div class="diagram" style="margin-top:26px;">
+<svg viewBox="0 0 1152 376" width="100%" aria-label="A handover timeline: the old session drains, a replacement is pre-opened, the microphone is teed into it after three seconds of quiet, and the swap happens after five">
+  <path class="s13-mk1" d="M380 20 V 292" stroke="#DADCE0" stroke-width="1.4" stroke-dasharray="4 4"/>
+  <path class="s13-mk2" d="M680 20 V 292" stroke="#DADCE0" stroke-width="1.4" stroke-dasharray="4 4"/>
+
+  <g transform="translate(0,0)" stroke="#FBBC05" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 1h10M4 17h10"/>
+    <path d="M6 1v3l3 5-3 5v3"/>
+    <path d="M12 1v3l-3 5 3 5v3"/>
+  </g>
+  <text x="26" y="14" font-family="Google Sans, Arial, sans-serif" font-size="14" font-weight="700" fill="#80868B">OLD SESSION</text>
+  <g class="s13-old">
+    <rect x="0" y="26" width="680" height="54" rx="5" fill="#FEF7E0" stroke="#FBBC05" stroke-width="2"/>
+    <text x="340" y="59" text-anchor="middle" font-family="Google Sans Text, Arial, sans-serif" font-size="16" fill="#B06000">draining — keep forwarding whatever it still has to say</text>
+  </g>
+
+  <g transform="translate(0,102)" stroke="#4285F4" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M1 7a8 8 0 0 1 13-4"/>
+    <path d="M14 0v4h-4"/>
+    <path d="M17 11a8 8 0 0 1-13 4"/>
+    <path d="M4 18v-4h4"/>
+  </g>
+  <text x="26" y="116" font-family="Google Sans, Arial, sans-serif" font-size="14" font-weight="700" fill="#80868B">REPLACEMENT</text>
+  <g class="s13-new">
+    <rect x="380" y="128" width="772" height="54" rx="5" fill="#E8F0FE" stroke="#4285F4" stroke-width="2"/>
+    <text x="766" y="161" text-anchor="middle" font-family="Google Sans Text, Arial, sans-serif" font-size="16" fill="#174EA6">opened in ~200 ms, warmed with replayed audio, then adopted</text>
+  </g>
+
+  <g transform="translate(0,204)" stroke="#5F6368" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="6" y="1" width="6" height="9" rx="3"/>
+    <path d="M3 8a6 6 0 0 0 12 0"/>
+    <path d="M9 14v4"/>
+  </g>
+  <text x="26" y="218" font-family="Google Sans, Arial, sans-serif" font-size="14" font-weight="700" fill="#80868B">MICROPHONE</text>
+  <rect x="0" y="230" width="1152" height="46" rx="5" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1.4"/>
+  <text x="576" y="256" text-anchor="middle" font-family="Google Sans Text, Arial, sans-serif" font-size="16" fill="#5F6368">never stops — every frame kept in a ~10 s ring buffer</text>
+  <path class="s13-mic" d="M16 267 H 1136" stroke="#5F6368" stroke-width="3.6" stroke-linecap="round" stroke-dasharray="0 72" fill="none" opacity="0"/>
+
+  <path class="s13-head" d="M1 18 V 292" stroke="#4285F4" stroke-width="1.6" fill="none" opacity="0"/>
+
+  <text x="0" y="322" font-family="Google Sans, Arial, sans-serif" font-size="15" font-weight="700" fill="#202124">t = 0 · GoAway arrives</text>
+  <text x="0" y="346" font-family="Google Sans Text, Arial, sans-serif" font-size="14" fill="#5F6368">Open the replacement immediately,</text>
+  <text x="0" y="366" font-family="Google Sans Text, Arial, sans-serif" font-size="14" fill="#5F6368">in the background. Keep draining.</text>
+
+  <text x="390" y="322" font-family="Google Sans, Arial, sans-serif" font-size="15" font-weight="700" fill="#202124">3 s of quiet</text>
+  <text x="390" y="346" font-family="Google Sans Text, Arial, sans-serif" font-size="14" fill="#5F6368">Tee the mic into the replacement</text>
+  <text x="390" y="366" font-family="Google Sans Text, Arial, sans-serif" font-size="14" fill="#5F6368">and replay what went unanswered.</text>
+
+  <text x="690" y="322" font-family="Google Sans, Arial, sans-serif" font-size="15" font-weight="700" fill="#202124">5 s of quiet</text>
+  <text x="690" y="346" font-family="Google Sans Text, Arial, sans-serif" font-size="14" fill="#5F6368">Cut over, rather than wait out the deadline. Send a</text>
+  <text x="690" y="366" font-family="Google Sans Text, Arial, sans-serif" font-size="14" fill="#5F6368">synthetic turnComplete to close the caption left open.</text>
+</svg>
+  </div>
+  <div class="foot"><span class="gc">Google Cloud</span><span class="pageno"></span></div>
+  <div class="notes">Both timers are measured from the last frame actually forwarded to the browser, so a turn genuinely in flight is never clipped. What gets replayed is exactly the audio captured since the outgoing session last said anything — everything older was already translated.<br><br>If a stalled drain recovers and finishes its turn after all, the mirrored replacement is thrown away and a fresh one opened: it heard audio the old session went on to answer, so keeping it would translate the same words twice. Across 11 observed GoAways, that was the most common path.<br><br>Watch the turn accounting: a synthetic turnComplete is a boundary with no turn behind it. Anything pairing utterances 1:1 with boundaries will sit one turn behind forever. The soak harness did exactly this and reported 68% while translation was perfect.</div>
+</section>
+
+<!-- ══════════════ 14 · SOAK NUMBERS ══════════════ -->
+<section class="slide">
+  <div class="h">One hour on Cloud Run, both modes at once</div>
+  <div class="hsub">Same container, <code>--max-instances 1</code>, so this doubles as a two-concurrent-session load test.</div>
+  <table class="t a" style="margin-top:44px;">
+    <thead><tr><th style="width:420px">Measured over the hour</th><th>Conversation</th><th>Simultaneous</th></tr></thead>
+    <tbody>
+      <tr><td>Iterations passed</td><td>200 / 201 &nbsp;<b>99.5%</b></td><td>201 / 223 &nbsp;<b>90.1%</b></td></tr>
+      <tr><td>Translation score, graded</td><td>9.9 / 10</td><td>9.3 / 10</td></tr>
+      <tr><td>Speech-end to full translation</td><td>avg 5.52 s &nbsp;·&nbsp; p90 6.70 s</td><td>avg 0.52 s &nbsp;·&nbsp; p90 1.11 s</td></tr>
+      <tr><td>Failures that reached the client</td><td>0</td><td>1</td></tr>
+    </tbody>
+  </table>
+  <div class="fn">Twelve GoAways, every one clean. The upstream closed <b>31 times</b> with <code>1008 policy violation</code> and the retry loop absorbed 30 of them invisibly. Simultaneous is judged harder, not hosted worse: it commits to output while the speaker is still talking and carries no system instruction to steer terminology.</div>
+  <div class="foot"><span class="gc">Google Cloud</span><span class="pageno"></span></div>
+  <div class="notes">The two latency columns are not the same measurement and should never be read as one mode being ten times faster at the same job. Conversation waits for the turn to end before it answers; simultaneous emits while you are still speaking, so its first response lands at 0.00 s by construction.<br><br>The recovery numbers are the ones to steal: connect timeout 10 s, retry backoff 0.2 s doubling to a 4 s cap, reset after a successful session. Before that fix, production logs showed ~20 errors per 24 hours; after, 1 error in 15 hours.</div>
+</section>
+
+<!-- ══════════════ 15 · TAKEAWAYS ══════════════ -->
+<section class="slide">
+  <div class="h">If you&rsquo;re building one of these</div>
+  <div class="grid c3" style="margin-top:56px; row-gap:48px;">
+    <div>
+      <svg width="46" height="46" viewBox="0 0 48 48" fill="none" aria-hidden="true"><g stroke="#4285F4" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="17" y="11" width="14" height="26" rx="3"/><path d="M21 17h6M21 24h6M21 31h3"/><path d="M6 24h11M31 24h11"/><circle cx="3.5" cy="24" r="2.5"/><circle cx="44.5" cy="24" r="2.5"/></g></svg>
+      <div class="cb" style="margin-top:16px; font-size:19px; color:var(--ink);">Relay through your own server unless you can mint ephemeral tokens</div>
+    </div>
+    <div>
+      <svg width="46" height="46" viewBox="0 0 48 48" fill="none" aria-hidden="true"><g stroke="#4285F4" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5h24M12 43h24"/><path d="M17 5v7l7 12-7 12v7"/><path d="M31 5v7l-7 12 7 12v7"/></g></svg>
+      <div class="cb" style="margin-top:16px; font-size:19px; color:var(--ink);">Treat session expiry as part of the protocol, not as an error</div>
+    </div>
+    <div>
+      <svg width="46" height="46" viewBox="0 0 48 48" fill="none" aria-hidden="true"><g stroke="#4285F4" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="12" height="10" rx="3"/><rect x="18" y="5" width="12" height="10" rx="3"/><rect x="33" y="5" width="12" height="10" rx="3"/><path d="M24 21v9M19 26l5 5 5-5"/><rect x="3" y="34" width="42" height="10" rx="3"/></g></svg>
+      <div class="cb" style="margin-top:16px; font-size:19px; color:var(--ink);">Buffer streamed transcripts across fragment boundaries before touching them</div>
+    </div>
+    <div>
+      <svg width="46" height="46" viewBox="0 0 48 48" fill="none" aria-hidden="true"><g stroke="#4285F4" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 8l-7 6H2v10h6l7 6z"/><path d="M19 15a7 7 0 0 1 0 10"/><rect x="32" y="7" width="10" height="15" rx="5"/><path d="M28 19a9 9 0 0 0 18 0"/><path d="M37 28v7"/></g></svg>
+      <div class="cb" style="margin-top:16px; font-size:19px; color:var(--ink);">Assume the speakers reach the microphone, and defend in more than one layer</div>
+    </div>
+    <div>
+      <svg width="46" height="46" viewBox="0 0 48 48" fill="none" aria-hidden="true"><g stroke="#4285F4" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M42 24A18 18 0 1 1 35 9.7"/><path d="M35 3v8h-8"/><path d="M24 15v10M24 32v.01"/></g></svg>
+      <div class="cb" style="margin-top:16px; font-size:19px; color:var(--ink);">Retry on close codes you have never seen before</div>
+    </div>
+    <div>
+      <svg width="46" height="46" viewBox="0 0 48 48" fill="none" aria-hidden="true"><g stroke="#4285F4" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="24" cy="27" r="17"/><path d="M24 17v10l7 5"/><path d="M19 3h10M24 3v7M38 12l3.5-3.5"/></g></svg>
+      <div class="cb" style="margin-top:16px; font-size:19px; color:var(--ink);">Soak for an hour before you believe a latency number</div>
+    </div>
+  </div>
+  <div class="foot"><span class="gc">Google Cloud</span><span class="pageno"></span></div>
+  <div class="notes">Two of these have stories behind them that are not on a slide. <i>Echo</i>: the translation plays out loud and the microphone hears it, so we stack browser AEC, <b>echoTargetLanguage: false</b> on the translate model, and a line in the system instruction &mdash; three layers, because the prompt is a hint and not a rule. <i>Fragments</i>: a Japanese term like &#12463;&#12496;&#12493;&#12486;&#12451;&#12473; arrives as &#12434;&#12463; + &#12496;&#12493;&#12486;&#12451; + &#12473;&#12395;, so glossary matching on each message finds nothing; buffering across boundaries took the display found-rate from 52% to 87%.<br><br>If you take one thing: the demo is the easy part. Everything on this list only appears after the first ten minutes of continuous use, and none of it is visible in a thirty-second recording.</div>
+</section>
+
+<!-- ══════════════ 16 · THANK YOU ══════════════ -->
+<section class="slide flex thanks">
+  <div class="inner">
+    <h1>Thank you</h1>
+    <div class="links">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true" style="vertical-align:-5px;margin-right:12px"><g stroke="#4285F4" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h6a4 4 0 0 1 4 4v13a3 3 0 0 0-3-3H2zM22 4h-6a4 4 0 0 0-4 4v13a3 3 0 0 1 3-3h7z"/></g></svg><b>Live API</b> &nbsp;ai.google.dev/gemini-api/docs/live-api<br>
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true" style="vertical-align:-5px;margin-right:12px"><g stroke="#4285F4" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 19a5 5 0 0 1-.6-9.96A7 7 0 0 1 19 10.6a4.2 4.2 0 0 1-.7 8.4z"/></g></svg><b>Agent Platform</b> &nbsp;docs.cloud.google.com/gemini-enterprise-agent-platform/models/live-api<br>
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true" style="vertical-align:-5px;margin-right:12px"><g stroke="#4285F4" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 7l-6 5 6 5M16 7l6 5-6 5M13.5 4l-3 16"/></g></svg><b>Reference app</b> &nbsp;github.com/kazunori279/live-translator
+    </div>
+  </div>
+  <div class="gclogo"><span class="b">G</span><span class="r">o</span><span class="y">o</span><span class="b">g</span><span class="g">l</span><span class="r">e</span> <span class="w">Cloud</span></div>
+</section>
+
+
+</div></div>
+
+<div id="hud"></div>
+<div id="help"><kbd>←</kbd> <kbd>→</kbd> slides &nbsp; <kbd>f</kbd> fullscreen &nbsp; <kbd>n</kbd> notes &nbsp; <kbd>⌘P</kbd> PDF</div>
+<div id="notes"></div>
+
+<script>
+(() => {
+  const slides = [...document.querySelectorAll('.slide')];
+  const hud = document.getElementById('hud');
+  const frame = document.getElementById('frame');
+  const notesEl = document.getElementById('notes');
+  let cur = Math.min(Math.max((parseInt(location.hash.slice(1), 10) || 1) - 1, 0), slides.length - 1);
+
+  // Page numbers are assigned from document order, so reordering slides can't
+  // leave a stale number behind.
+  slides.forEach((s, j) => {
+    const n = s.querySelector('.pageno');
+    if (n) n.textContent = j + 1;
+  });
+
+  function show(i) {
+    cur = Math.min(Math.max(i, 0), slides.length - 1);
+    // Leaving a slide silences it — media playing over the next slide is worse than none.
+    slides.forEach((s, j) => {
+      if (j !== cur) s.querySelectorAll('video, audio').forEach(v => { if (!v.paused) v.pause(); });
+      s.classList.toggle('active', j === cur);
+    });
+    hud.textContent = (cur + 1) + ' / ' + slides.length;
+    history.replaceState(null, '', '#' + (cur + 1));
+    const note = slides[cur].querySelector('.notes');
+    notesEl.innerHTML = note ? note.innerHTML : '<i style="color:#9AA0A6">No notes for this slide.</i>';
+  }
+
+  function fit() {
+    const vw = (window.visualViewport && visualViewport.width) || innerWidth;
+    const vh = (window.visualViewport && visualViewport.height) || innerHeight;
+    const s = Math.min(vw / 1280, vh / 720) * 0.96;
+    frame.style.transform = 'translate(-50%, -50%) scale(' + s + ')';
+  }
+
+  addEventListener('keydown', e => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;          // leave ⌘P and friends alone
+    if (e.target instanceof HTMLVideoElement && e.key !== 'Escape') return;
+    if (['ArrowRight', 'PageDown', ' '].includes(e.key)) { e.preventDefault(); show(cur + 1); }
+    else if (['ArrowLeft', 'PageUp'].includes(e.key)) { e.preventDefault(); show(cur - 1); }
+    else if (e.key === 'Home') show(0);
+    else if (e.key === 'End') show(slides.length - 1);
+    else if (e.key === 'n') notesEl.classList.toggle('on');
+    else if (e.key === 'f') document.fullscreenElement ? document.exitFullscreen()
+                                                       : document.documentElement.requestFullscreen();
+  });
+
+  addEventListener('click', e => {
+    if (e.target.closest('a, video, audio, #notes')) return;  // links own their clicks
+    show(e.clientX > innerWidth / 2 ? cur + 1 : cur - 1);
+  });
+
+  let tx = null, ty = null;
+  addEventListener('touchstart', e => { tx = e.touches[0].clientX; ty = e.touches[0].clientY; }, { passive: true });
+  addEventListener('touchend', e => {
+    if (tx === null) return;
+    const dx = e.changedTouches[0].clientX - tx, dy = e.changedTouches[0].clientY - ty;
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) show(dx < 0 ? cur + 1 : cur - 1);
+    tx = ty = null;
+  }, { passive: true });
+
+  addEventListener('resize', fit);
+  addEventListener('orientationchange', fit);
+  if (window.visualViewport) visualViewport.addEventListener('resize', fit);
+  addEventListener('hashchange', () => {
+    const n = (parseInt(location.hash.slice(1), 10) || 1) - 1;
+    if (n !== cur) show(n);
+  });
+
+  fit(); show(cur);
+})();
+</script>
+</body>
+</html>

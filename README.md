@@ -4,6 +4,10 @@ Real-time audio translation powered by Gemini Live API. Speak in any language an
 
 ![Demo](demo.gif)
 
+## Slides
+
+[**Real-time voice on the Gemini Live API**](https://kazunori279.github.io/live-translator/slides/) — a ~15 minute deck that uses this app as the worked example: what it does, the Gemini Live API underneath it, and what an hour of soak testing on Cloud Run taught us. Press `n` for speaker notes, `f` for fullscreen, `⌘P` to export a PDF.
+
 ## Getting Started
 
 ### Prerequisites
