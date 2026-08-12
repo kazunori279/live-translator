@@ -69,11 +69,14 @@ async function populateLanguages() {
       );
     }
   }
-  const agentLangs = data?.languages || LANG_FALLBACK;
-  const simulLangs = data?.simulLanguages || LANG_FALLBACK;
-  await fillTabTarget(simulLangs);
-  fill(el("micSource"), agentLangs, settings.micSource);
-  fill(el("micTarget"), agentLangs, settings.micTarget);
+  const agent = { langs: data?.languages || LANG_FALLBACK, popular: data?.popular || [] };
+  const simul = {
+    langs: data?.simulLanguages || LANG_FALLBACK,
+    popular: data?.simulPopular || [],
+  };
+  await fillTabTarget(simul);
+  fill(el("micSource"), agent, settings.micSource);
+  fill(el("micTarget"), agent, settings.micTarget);
 }
 
 /**
@@ -81,29 +84,52 @@ async function populateLanguages() {
  * is not the code the agent model uses. Map before filling so a stored `zh`
  * lands on Chinese rather than silently resetting to the top of the list.
  */
-async function fillTabTarget(simulLangs) {
+async function fillTabTarget(simul) {
   let code = settings.tabTarget;
-  if (!(code in simulLangs) && code in AGENT_TO_SIMUL) code = AGENT_TO_SIMUL[code];
-  fill(el("tabTarget"), simulLangs, code);
+  if (!(code in simul.langs) && code in AGENT_TO_SIMUL) code = AGENT_TO_SIMUL[code];
+  fill(el("tabTarget"), simul, code);
   if (el("tabTarget").value !== settings.tabTarget) {
     settings.tabTarget = el("tabTarget").value;
     await saveSettings({ tabTarget: settings.tabTarget });
   }
 }
 
-function fill(select, languages, selected) {
+/**
+ * Ten popular languages first, then all of them alphabetically — the same
+ * shape the web app's custom dropdown uses, expressed as `<optgroup>`s so the
+ * side panel can stay on a native select. The popular codes appear twice on
+ * purpose, once in each group, exactly as they do in the web app.
+ */
+function fill(select, { langs, popular }, selected) {
   select.innerHTML = "";
-  const codes = Object.keys(languages).sort((a, b) =>
-    languages[a].localeCompare(languages[b])
-  );
-  for (const code of codes) {
-    const opt = document.createElement("option");
-    opt.value = code;
-    opt.textContent = languages[code];
-    if (code === selected) opt.selected = true;
-    select.appendChild(opt);
+  const codes = Object.keys(langs).sort((a, b) => langs[a].localeCompare(langs[b]));
+  const top = popular.filter((code) => code in langs);
+  if (top.length) {
+    select.appendChild(optgroup("Popular", top, langs));
+    select.appendChild(optgroup("All languages", codes, langs));
+  } else {
+    // No list from the relay (offline, or the fallback pair) — a flat select
+    // reads better than one group holding everything.
+    for (const code of codes) select.appendChild(option(code, langs[code]));
   }
-  if (!codes.includes(selected) && codes.length) select.value = codes[0];
+  // Assigning `value` picks the first option with that code, which is the
+  // popular copy where there is one; per-option `selected` would leave the
+  // duplicate at the bottom of the list highlighted instead.
+  select.value = codes.includes(selected) ? selected : top[0] || codes[0] || "";
+}
+
+function optgroup(label, codes, langs) {
+  const group = document.createElement("optgroup");
+  group.label = label;
+  for (const code of codes) group.appendChild(option(code, langs[code]));
+  return group;
+}
+
+function option(value, text) {
+  const opt = document.createElement("option");
+  opt.value = value;
+  opt.textContent = text;
+  return opt;
 }
 
 function bind() {
