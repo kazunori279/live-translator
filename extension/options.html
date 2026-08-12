@@ -55,8 +55,8 @@
     <p class="note">
       <code>source,pronunciation,transcript</code> per line. The second column is
       what the model is told to say; the optional third is what the captions
-      show instead. Applies to the microphone direction and to tab audio with
-      auto-detect off — the simultaneous-translation model takes no glossary.
+      show instead. Applies to the microphone direction only: tab audio always
+      runs the simultaneous-translation model, which takes no glossary.
     </p>
     <div class="row">
       <input type="file" id="glossaryFile" accept=".csv" />

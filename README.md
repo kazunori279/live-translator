@@ -157,10 +157,12 @@ The web app can only translate what a microphone hears. That covers a booth or a
 
 It translates two things, independently, and either can be switched off:
 
-| Direction | What it hears | Mode |
-|---|---|---|
-| **Tab audio** | whatever the current tab is playing | simultaneous by default — the source language is auto-detected, which is what you want when you don't know who is about to speak |
-| **Microphone** | you | conversation-style one-way, `source → target`, so the [glossary](#glossary) applies |
+| Direction | What it hears | Model | You choose |
+|---|---|---|---|
+| **Tab audio** | whatever the current tab is playing | `gemini-3.5-live-translate-preview` — [simultaneous translation](#simultaneous-translation), source auto-detected | the target language only |
+| **Microphone** | you | `gemini-3.1-flash-live-preview` — one-way agent mode, so the [glossary](#glossary) applies | source and target |
+
+The tab direction is fixed to the simultaneous model rather than offered as a choice. A tab plays whoever it plays — a video cuts to a second speaker, a call hands over to someone else — so naming a source language up front is a promise the listener cannot keep. Auto-detect is the only setting that survives contact with real tab audio, which is why there is no source-language picker on that side.
 
 The extension talks to the same relay the web app does, so it needs no API key of its own. It ships with the two Cloud Run regions and `http://localhost:8000` as presets.
 
@@ -187,7 +189,7 @@ With both directions running, the microphone is **gated while a translation is p
 
 - **The microphone direction's translated speech can only reach your own speakers.** Getting it into a Meet or Zoom microphone needs a virtual audio device (BlackHole, VB-Cable); no extension can do it. For a call, that direction is useful for subtitles and for people physically in the room — not for the remote party.
 - **Running both directions on speakers reinvites the [echo loop](#echo-and-feedback).** Echo cancellation and the duplex gate help; headphones are still the real answer.
-- **The tab direction takes no glossary** while auto-detect is on. That is a limit of the simultaneous-translation model, not of the extension — turn auto-detect off and name the source language to get the glossary back.
+- **The tab direction takes no glossary.** The simultaneous-translation model supports neither a glossary nor system instructions, and that direction always uses it. Terms are still rewritten in the microphone direction.
 - **Two directions means two concurrent Live sessions**, so roughly double the API cost. The side panel says so when both are on.
 - Chrome refuses script injection on its own pages, the Web Store, and PDFs, so subtitles do not appear there. Capture and the side-panel transcript still work.
 
@@ -326,6 +328,8 @@ both sockets' audio ─► ctxDown (24 kHz) ─► pcm-player-processor ─► s
 `ctxPass` runs at the stream's native rate on purpose: pushing 48 kHz tab audio through the 24 kHz player context would resample it down and audibly dull anything musical.
 
 **Ducking and the duplex gate share one signal.** Model audio arrives far faster than realtime, so "is a voice speaking right now" cannot be answered by "did a frame just arrive". Each arriving buffer extends a play-out deadline by `byteLength / 2 / 24000` seconds; ducking and the microphone gate both read that deadline (plus a 400 ms release), and `duckGain` moves on a `setTargetAtTime` ramp so it does not click.
+
+**Transcripts are segmented by a silence gap, not by a turn.** Simultaneous translation never sends `turnComplete` — there are no turns in a continuous feed — so the accumulator that joins streamed increments has no natural end and would run for the whole session, leaving one caption line that grows until it covers the video. A 2 s gap in the increments closes the sentence instead, the same rule and the same interval `app/static/js/app.js` uses. Independently, a caption line is capped at three wrapped rows and bottom-aligned inside the clip, so a long sentence loses its already-read head rather than its newest words.
 
 **Permissions are kept small.** No content script is declared and there is no `<all_urls>`: subtitles are injected with `chrome.scripting.executeScript` under `activeTab`, which the toolbar click already grants. The backend origin is an `optional_host_permission` requested on the Start click, because the URL is configurable and cannot be baked into the manifest.
 

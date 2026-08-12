@@ -13,15 +13,13 @@ import { DEFAULTS, loadSettings, saveSettings, originPattern } from "./lib/setti
 const el = (id) => document.getElementById(id);
 const LANG_FALLBACK = { en: "English", ja: "Japanese" };
 
-// The two models take different code sets for the same languages, so a target
-// picked in one mode has to be carried across when the mode flips. Same tables
-// as `app/static/js/app.js`.
+// The tab direction is always the simultaneous-translation model, whose codes
+// differ from the agent model's for a handful of languages. A target left in
+// storage by an earlier build — or shared with the microphone direction's
+// vocabulary — is translated across rather than dropped.
 const AGENT_TO_SIMUL = { zh: "zh-Hans", iw: "he", pt: "pt-BR" };
-const SIMUL_TO_AGENT = { "zh-Hans": "zh", "zh-Hant": "zh", he: "iw", "pt-BR": "pt", "pt-PT": "pt" };
 
 let settings = { ...DEFAULTS };
-let agentLangs = LANG_FALLBACK;
-let simulLangs = LANG_FALLBACK;
 let running = false;
 // The bubble currently being appended to, per direction and side, so streamed
 // increments extend a line instead of starting a new one.
@@ -71,30 +69,22 @@ async function populateLanguages() {
       );
     }
   }
-  agentLangs = data?.languages || LANG_FALLBACK;
-  simulLangs = data?.simulLanguages || LANG_FALLBACK;
-  // Only the tab target crosses model boundaries. The tab source is read solely
-  // in agent mode, and the microphone direction is always agent mode.
-  fillTabTarget();
-  fill(el("tabSource"), agentLangs, settings.tabSource);
+  const agentLangs = data?.languages || LANG_FALLBACK;
+  const simulLangs = data?.simulLanguages || LANG_FALLBACK;
+  await fillTabTarget(simulLangs);
   fill(el("micSource"), agentLangs, settings.micSource);
   fill(el("micTarget"), agentLangs, settings.micTarget);
 }
 
 /**
- * The tab target's code set follows the auto-detect toggle.
- *
- * With auto-detect on the relay talks to the simultaneous-translation model,
- * whose BCP-47 codes differ for a handful of languages. Switching modes with
- * Chinese selected must land on Chinese, not silently reset to the top of the
- * list, so the code is mapped across before the dropdown is refilled.
+ * The tab target is a simultaneous-translation code, which for a few languages
+ * is not the code the agent model uses. Map before filling so a stored `zh`
+ * lands on Chinese rather than silently resetting to the top of the list.
  */
-async function fillTabTarget() {
-  const langs = settings.tabSimul ? simulLangs : agentLangs;
-  const table = settings.tabSimul ? AGENT_TO_SIMUL : SIMUL_TO_AGENT;
+async function fillTabTarget(simulLangs) {
   let code = settings.tabTarget;
-  if (!(code in langs) && code in table) code = table[code];
-  fill(el("tabTarget"), langs, code);
+  if (!(code in simulLangs) && code in AGENT_TO_SIMUL) code = AGENT_TO_SIMUL[code];
+  fill(el("tabTarget"), simulLangs, code);
   if (el("tabTarget").value !== settings.tabTarget) {
     settings.tabTarget = el("tabTarget").value;
     await saveSettings({ tabTarget: settings.tabTarget });
@@ -119,13 +109,12 @@ function fill(select, languages, selected) {
 function bind() {
   for (const [id, key] of [
     ["tabEnabled", "tabEnabled"],
-    ["tabSimul", "tabSimul"],
     ["micEnabled", "micEnabled"],
     ["captions", "captions"],
   ]) {
     el(id).addEventListener("change", () => update({ [key]: el(id).checked }));
   }
-  for (const id of ["tabTarget", "tabSource", "micSource", "micTarget"]) {
+  for (const id of ["tabTarget", "micSource", "micTarget"]) {
     el(id).addEventListener("change", () => update({ [id]: el(id).value }));
   }
   el("duckLevel").addEventListener("input", () => {
@@ -140,7 +129,6 @@ function bind() {
 async function update(patch) {
   Object.assign(settings, patch);
   await saveSettings(patch);
-  if ("tabSimul" in patch) await fillTabTarget();
   render();
   if (running && !("duckLevel" in patch)) {
     // Languages, direction and mode are all baked into the relay's session
@@ -151,17 +139,14 @@ async function update(patch) {
 
 function render() {
   el("tabEnabled").checked = settings.tabEnabled;
-  el("tabSimul").checked = settings.tabSimul;
   el("micEnabled").checked = settings.micEnabled;
   el("captions").checked = settings.captions;
   el("tabTarget").value = settings.tabTarget;
-  el("tabSource").value = settings.tabSource;
   el("micSource").value = settings.micSource;
   el("micTarget").value = settings.micTarget;
   el("duckLevel").value = Math.round(settings.duckLevel * 100);
   el("duckLevelOut").textContent = `${Math.round(settings.duckLevel * 100)}%`;
 
-  el("tabSourceRow").hidden = settings.tabSimul;
   el("tabEnabled").closest(".direction").classList.toggle("off", !settings.tabEnabled);
   el("micEnabled").closest(".direction").classList.toggle("off", !settings.micEnabled);
   el("costNote").hidden = !(settings.tabEnabled && settings.micEnabled);

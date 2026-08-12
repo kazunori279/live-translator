@@ -21,14 +21,12 @@ export const DEFAULTS = {
   backendUrl: BACKENDS["us-central1"],
   voice: "", // "" means "whatever /api/languages calls the default"
   glossary: null, // null = not seeded yet; [] = deliberately empty
-  // tab → you. Simul auto-detects the source, which is what you want from a
-  // video whose speakers you did not pick.
+  // tab → you. Always the simultaneous-translation model: a tab plays whoever
+  // it plays, and naming a source language up front is a promise the listener
+  // cannot keep. Auto-detect is the only setting that fits, so it is not
+  // offered as a choice — which is also why there is no tab source language.
   tabEnabled: true,
   tabTarget: "en",
-  tabSimul: true,
-  // Only consulted when tabSimul is off, where the relay needs a source
-  // language to build a one-way instruction around.
-  tabSource: "ja",
   // you → them. One-way agent mode: the source is known (it is you), so the
   // glossary applies, which it cannot in simul.
   micEnabled: false,

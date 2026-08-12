@@ -112,12 +112,8 @@ async function start({ streamId, settings, glossary }) {
       "tab",
       state.tabStream,
       setup,
-      {
-        simul: settings.tabSimul ? "true" : undefined,
-        source: settings.tabSimul ? undefined : settings.tabSource,
-        target: settings.tabTarget,
-      },
-      settings.tabSimul
+      { simul: "true", target: settings.tabTarget },
+      true
     );
   }
 
