@@ -56,6 +56,14 @@ const state = {
   active: false,
 };
 
+// Declared here, above the message listener, and deliberately not as a
+// `const` initialised at the end of the module: the service worker retries
+// `sendMessage` every 50ms until the listener below exists, so a `start` can
+// arrive in the window between that listener being registered and the last
+// statement of this module running. A trailing `const` would still be in its
+// temporal dead zone at that point, and `start` would throw reading it.
+let contextsReady = null;
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.target !== "offscreen") return false;
   const done = (result) => sendResponse({ ok: true, ...result });
@@ -78,7 +86,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
 });
 
 async function start({ streamId, settings, glossary }) {
-  await ready;
+  await ensureContexts();
   await stop();
   state.settings = settings;
   state.displayMap = buildDisplayMap(glossary);
@@ -332,11 +340,25 @@ function post(payload) {
 }
 
 /**
- * The two rate-fixed contexts are built once, at load, and reused across
- * start/stop cycles. Registering an AudioWorklet module is asynchronous, and
- * doing it per start would race the first arriving audio frame — so `start`
- * awaits this rather than repeating it.
+ * The two rate-fixed contexts, built once and reused across start/stop cycles.
+ *
+ * Registering an AudioWorklet module is asynchronous, and doing it per start
+ * would race the first arriving audio frame — so this is done once and `start`
+ * awaits it. Lazily, on the first start rather than at load, so that the order
+ * of statements in this module cannot matter to a message that arrives mid-
+ * evaluation. A failure is not cached: a worklet that failed to register once
+ * leaves the extension unusable until reload if the next Start cannot retry.
  */
+function ensureContexts() {
+  if (!contextsReady) {
+    contextsReady = initContexts().catch((err) => {
+      contextsReady = null;
+      throw err;
+    });
+  }
+  return contextsReady;
+}
+
 async function initContexts() {
   state.ctxUp = new AudioContext({ sampleRate: UPLINK_RATE });
   state.ctxDown = new AudioContext({ sampleRate: DOWNLINK_RATE });
@@ -345,5 +367,3 @@ async function initContexts() {
   await state.ctxUp.audioWorklet.addModule("audio/pcm-recorder-processor.js");
   await state.ctxDown.audioWorklet.addModule("audio/pcm-player-processor.js");
 }
-
-const ready = initContexts();
