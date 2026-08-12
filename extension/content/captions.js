@@ -32,7 +32,7 @@
   const root = host.attachShadow({ mode: "closed" });
   root.innerHTML = `
     <style>
-      :host { all: initial; }
+      :host { all: initial; --max-rows: 3; }
       #lines {
         display: flex; flex-direction: column; align-items: center;
         gap: 0.3rem; padding: 0 2rem 2.5rem; pointer-events: none;
@@ -44,7 +44,16 @@
         padding: 0.25rem 0.8rem; border-radius: 0.4rem;
         max-width: 90%; text-align: center; word-wrap: break-word;
         animation: line-in 0.25s ease-out;
+        /* A single sentence still has to fit on someone's video. The cap is on
+           wrapped rows, not on characters, and the text is bottom-aligned so
+           what overflows is the part already read — the newest words stay on
+           screen. Hiding the overflow is what turns it into a clip. */
+        display: flex; align-items: flex-end; overflow: hidden;
+        max-height: calc(var(--max-rows) * 1.4em);
       }
+      /* One flex item, so the clip above applies to the wrapped block as a
+         whole rather than to a bare text node and the dot separately. */
+      .text { flex: 1 1 auto; min-width: 0; }
       .line.fade-out { animation: line-out 0.8s ease-in forwards; }
       .dot {
         display: inline-block; width: 0.5rem; height: 0.5rem;
@@ -66,19 +75,26 @@
   function addLine(text, partial) {
     const div = document.createElement("div");
     div.className = "line";
-    div.textContent = text;
-    if (partial) div.appendChild(dot());
+    const span = document.createElement("span");
+    span.className = "text";
+    div.appendChild(span);
     linesEl.appendChild(div);
     currentLine = div;
     while (linesEl.children.length > MAX_LINES) linesEl.removeChild(linesEl.firstChild);
+    setText(div, text, partial);
     if (!partial) scheduleFade(div);
   }
 
   function updateLine(text, partial) {
     if (!currentLine) return addLine(text, partial);
-    currentLine.textContent = text;
-    if (partial) currentLine.appendChild(dot());
-    else scheduleFade(currentLine);
+    setText(currentLine, text, partial);
+    if (!partial) scheduleFade(currentLine);
+  }
+
+  function setText(line, text, partial) {
+    const span = line.querySelector(".text");
+    span.textContent = text;
+    if (partial) span.appendChild(dot());
   }
 
   function dot() {

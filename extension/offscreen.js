@@ -35,6 +35,13 @@ const USER_ID = "chrome-extension";
 const DUCK_RAMP_SEC = 0.12;
 const VOICE_RELEASE_SEC = 0.4;
 
+// Simultaneous translation never sends `turnComplete` — there are no turns in a
+// continuous feed. Without a second signal the transcript accumulator would run
+// for the whole session and the on-page caption would be one line that grows
+// until it covers the video. A gap in the increments is the only turn boundary
+// on offer, so it is the one used. Same 2s as `app/static/js/app.js`.
+const SIMUL_IDLE_MS = 2000;
+
 const state = {
   settings: null,
   displayMap: [],
@@ -101,19 +108,28 @@ async function start({ streamId, settings, glossary }) {
       },
     });
     startPassthrough(state.tabStream);
-    state.tab = openDirection("tab", state.tabStream, setup, {
-      simul: settings.tabSimul ? "true" : undefined,
-      source: settings.tabSimul ? undefined : settings.tabSource,
-      target: settings.tabTarget,
-    });
+    state.tab = openDirection(
+      "tab",
+      state.tabStream,
+      setup,
+      {
+        simul: settings.tabSimul ? "true" : undefined,
+        source: settings.tabSimul ? undefined : settings.tabSource,
+        target: settings.tabTarget,
+      },
+      settings.tabSimul
+    );
   }
 
   if (settings.micEnabled) {
     state.micStream = await getMicStream();
-    state.mic = openDirection("mic", state.micStream, setup, {
-      source: settings.micSource,
-      target: settings.micTarget,
-    });
+    state.mic = openDirection(
+      "mic",
+      state.micStream,
+      setup,
+      { source: settings.micSource, target: settings.micTarget },
+      false // agent mode, which does send turnComplete
+    );
   }
 
   startDuckLoop();
@@ -163,9 +179,9 @@ function startPassthrough(stream) {
 }
 
 /** Wire one capture stream to one relay socket, and its replies to a speaker. */
-function openDirection(name, stream, setup, params) {
+function openDirection(name, stream, setup, params, simul) {
   const player = makePlayer();
-  const acc = { input: "", output: "" };
+  const acc = { input: "", output: "", simul, idle: null };
   const session = new LiveSession({
     url: () =>
       webSocketUrl(
@@ -186,7 +202,7 @@ function openDirection(name, stream, setup, params) {
     if (name === "mic" && state.settings.duplexGate && speaking()) return;
     session.send(pcm);
   });
-  return { session, player, node };
+  return { session, player, node, acc };
 }
 
 /**
@@ -205,14 +221,16 @@ function onEvent(direction, ev, player, acc) {
     return;
   }
   if (ev.type === "turnComplete") {
-    acc.input = "";
-    acc.output = "";
-    post({ type: "turnComplete", direction });
+    endTurn(direction, acc);
     return;
   }
   acc[ev.type] = ev.finished ? ev.text : acc[ev.type] + ev.text;
   const text = applyDisplayMap(acc[ev.type], state.displayMap);
   if (ev.finished) acc[ev.type] = "";
+  if (acc.simul) {
+    clearTimeout(acc.idle);
+    acc.idle = setTimeout(() => endTurn(direction, acc), SIMUL_IDLE_MS);
+  }
   post({
     type: "transcript",
     direction,
@@ -220,6 +238,15 @@ function onEvent(direction, ev, player, acc) {
     text: ev.type === "input" ? cleanCJKSpaces(text) : text,
     finished: ev.finished,
   });
+}
+
+/** Close the open sentence: drop the accumulator and let both surfaces know. */
+function endTurn(direction, acc) {
+  clearTimeout(acc.idle);
+  acc.idle = null;
+  acc.input = "";
+  acc.output = "";
+  post({ type: "turnComplete", direction });
 }
 
 /** 16 kHz uplink: mono-downmixed PCM16, the format the relay forwards as-is. */
@@ -287,6 +314,7 @@ async function stop() {
   state.duckTimer = null;
   for (const dir of [state.tab, state.mic]) {
     if (!dir) continue;
+    clearTimeout(dir.acc.idle);
     dir.session.close();
     dir.node.port.onmessage = null;
     dir.node.disconnect();
