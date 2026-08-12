@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Live Translator</title>
+    <link rel="stylesheet" href="sidepanel.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Live Translator</h1>
+      <div class="status">
+        <span id="statusDot" class="dot disconnected"></span>
+        <span id="statusText">Idle</span>
+      </div>
+    </header>
+
+    <div id="error" class="banner error" hidden></div>
+
+    <section class="direction">
+      <label class="row heading">
+        <input type="checkbox" id="tabEnabled" />
+        <span><b>Tab audio</b> — this tab, into your language</span>
+      </label>
+      <div class="row indent">
+        <select id="tabTarget" class="lang" title="Language you want to hear"></select>
+        <label class="inline">
+          <input type="checkbox" id="tabSimul" />
+          Auto-detect source
+        </label>
+      </div>
+      <div class="row indent" id="tabSourceRow">
+        <span class="small">from</span>
+        <select id="tabSource" class="lang"></select>
+        <span class="small">— glossary applies in this mode</span>
+      </div>
+      <div class="row indent">
+        <label class="inline grow">
+          Original volume while speaking
+          <input type="range" id="duckLevel" min="0" max="100" step="5" />
+          <output id="duckLevelOut"></output>
+        </label>
+      </div>
+      <div class="row indent">
+        <label class="inline">
+          <input type="checkbox" id="captions" />
+          Subtitles on the page
+        </label>
+      </div>
+    </section>
+
+    <section class="direction">
+      <label class="row heading">
+        <input type="checkbox" id="micEnabled" />
+        <span><b>Microphone</b> — you, into their language</span>
+      </label>
+      <div class="row indent">
+        <select id="micSource" class="lang"></select>
+        <span class="small">→</span>
+        <select id="micTarget" class="lang"></select>
+      </div>
+      <p class="note indent" id="micNote">
+        The translation comes out of <b>your speakers</b>. Getting it into a Meet or
+        Zoom microphone needs a virtual audio device — an extension cannot do it.
+        With both directions on, wear headphones: speakers feed the translation
+        straight back into the mic.
+      </p>
+    </section>
+
+    <section class="row buttons">
+      <button id="toggle" class="primary">Start</button>
+      <button id="openOptions" class="ghost" title="Options">Options</button>
+    </section>
+
+    <p class="note" id="costNote" hidden>
+      Both directions run two concurrent Live sessions, so the API cost is roughly
+      double.
+    </p>
+
+    <div id="transcript"></div>
+
+    <script type="module" src="sidepanel.js"></script>
+  </body>
+</html>
