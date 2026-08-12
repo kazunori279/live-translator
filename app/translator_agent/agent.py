@@ -317,6 +317,43 @@ _ECHO_GUARD = (
 )
 
 
+# A booth, a lecture hall, or a meeting room carries speech the session was
+# never set up for — a bystander in a third language, a video playing nearby.
+#
+# Asking the model to stay silent on those does not work. Told to produce
+# nothing it either translates the utterance anyway or parrots it back verbatim,
+# and escalating the wording only shifted the mix between those two: measured
+# over ten attempts (French into an en/ja session, four successive phrasings
+# including an explicit "produce no output at all"), silence happened zero
+# times. The model is going to speak; the only thing actually under our control
+# is which language it speaks in.
+#
+# So this routes the case rather than forbidding it. Left alone the model sent
+# French to English — the one language in an en/ja room that nobody needed it
+# in — so the rule names the destination explicitly and rules out the two
+# observed failures, repeating the utterance and picking the other language.
+def _off_language_route(target_name: str, avoid: str | None = None) -> str:
+    """Send speech outside the session's languages to *target_name*."""
+    not_the_other = (
+        f" It is especially not {avoid}: a third language is not a reason to "
+        f"reach for {avoid}, which you speak only to render what a "
+        f"{target_name} speaker said."
+        if avoid
+        else ""
+    )
+    return (
+        f"Not every utterance will be in one of those languages. A bystander, a "
+        f"nearby conversation, or a speaker who switches to a third language "
+        f"still reaches your microphone. When you hear one, translate it into "
+        f"{target_name} — the same as you would for any other utterance that was "
+        f"not in {target_name}. Do not repeat it back in the language it was "
+        f"spoken in.{not_the_other} "
+        f"A name, a loanword, or a technical term shared with another language "
+        f"does not decide the matter — judge by the language the sentence as a "
+        f"whole is spoken in. "
+    )
+
+
 def build_system_instruction(
     source_lang: str = "en",
     target_lang: str = "ja",
@@ -336,6 +373,7 @@ def build_system_instruction(
         f"Translate only the current utterance. Do not repeat, reference, or "
         f"prepend translations from previous turns. Each spoken segment should "
         f"produce exactly one translation of that segment and nothing else. "
+        + _off_language_route(target_name)
         + _ECHO_GUARD
         + _glossary_section(entries)
     )
@@ -370,10 +408,15 @@ def build_conversation_instruction(
     )
     return (
         f"You are a real-time interpreter for a live, two-way conversation between "
-        f"a {a} speaker and a {b} speaker. Every utterance you hear is in one of "
-        f"those two languages, and you speak it back in the other one:\n"
-        f"- {a} in, {b} out.\n"
-        f"- {b} in, {a} out.\n"
+        f"a {a} speaker and a {b} speaker. Everything you say comes out in one of "
+        f"those two languages. Every utterance you hear goes down exactly one of "
+        f"three routes:\n"
+        f"- {a} in → speak the {b} translation.\n"
+        f"- {b} in → speak the {a} translation.\n"
+        f"- any other language in → speak the {b} translation.\n"
+        f"Those three collapse into one test, and it is the only one you need: if "
+        f"the utterance was in {b}, reply in {a}; in every other case, reply in "
+        f"{b}. {a} is reserved for one job — rendering what a {b} speaker said. "
         f"Work out which silently. Everything you say is the translation itself and "
         f"nothing else — never announce, label, or describe what language you heard, "
         f"and never preface a translation with a note about it. "
@@ -383,6 +426,7 @@ def build_conversation_instruction(
         f"translations from previous turns. Each spoken segment should produce exactly "
         f"one translation of that segment and nothing else. Never translate into the "
         f"same language the utterance was spoken in, and never echo the original. "
+        + _off_language_route(b, avoid=a)
         + _ECHO_GUARD
         + _glossary_section_bidi(entries)
     )

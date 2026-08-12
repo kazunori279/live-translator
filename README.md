@@ -55,6 +55,7 @@ Good for a two-way meeting, an interview, or a conversation at a booth.
 - Both language dropdowns stay visible — choose the pair you want to interpret between.
 - Your glossary applies in both directions.
 - One voice speaks both sides of the conversation.
+- If someone speaks a *third* language, it comes out in the second of your two languages — the one on the right. A bystander at a booth speaking French, in an English/Japanese session, is translated into Japanese rather than English ([why](#speech-in-a-third-language)).
 
 ### Simultaneous Translation
 
@@ -203,6 +204,22 @@ FastAPI bridges one browser WebSocket to a series of Gemini Live API sessions. T
 **Conversation mode** (the UI default) reuses the agent model (`gemini-3.1-flash-live-preview`) but with a bidirectional interpreter system instruction (`build_conversation_instruction` in `app/translator_agent/agent.py`): it tells the model to detect which of the two configured languages each utterance is in and reply in the other. The WebSocket carries a `convo=true` query param; the glossary is embedded bidirectionally (`source ↔ target`). Without that param the server falls back to one-way agent mode (`build_system_instruction`), which the UI no longer requests but the test harness still exercises.
 
 Audio input is 16 kHz mono PCM; output is 24 kHz PCM (both modes).
+
+### Speech in a Third Language
+
+A booth or a lecture hall carries speech the session was never set up for — a bystander, a nearby conversation, a video playing. Left to itself the interpreter translated that speech into **English** in an en/ja session: not the target, but the *other* configured language, and the one language in that room nobody needed it in.
+
+Silence is the behaviour you actually want, and the model will not do it. Asked to produce nothing it either translated the utterance anyway or parroted it back verbatim in the language it was spoken in. Four successive phrasings, up to and including an explicit "produce no output at all: no speech, no sound, no text", gave **zero silences in ten attempts** — the same limit the simul mode notes below run into, where prompt-level suppression was unavailable and only `echo_target_language=False` worked. A parroted utterance is also invisible in the transcript: it arrives as audio with no output transcription at all, so it looks like silence in the logs and is only identifiable from the audio itself.
+
+So `_off_language_route` in `app/translator_agent/agent.py` routes the case instead of forbidding it. The model is going to speak; the language it speaks in is the part that is controllable.
+
+Naming the destination was not enough on its own — "translate it into Japanese, and not into English" still went to English 2 of 3 times. What fixed it was collapsing the three routes into the binary test they actually are:
+
+> if the utterance was in `b`, reply in `a`; in every other case, reply in `b`.
+
+Both `a → b` and `other → b` share a destination, so the model never has to classify three ways — it only has to answer "was that `b`?", and `a` is described as reserved for the single job of rendering what a `b` speaker said. With that phrasing, French, German, and Spanish all routed to Japanese, 8 for 8, and both original directions still pass.
+
+The tradeoff is that a third language is still translated and still spoken; it is merely spoken into the language the audience is listening in. Genuinely suppressing it needs a server-side gate on the input transcription rather than a prompt.
 
 ### Echo Handling
 
@@ -390,7 +407,7 @@ What this does and does not buy you. The relay moves closer to the listener, whi
 
 The cases that matter:
 
-- **Conversation** interprets in *both* directions — one case speaks English and expects Japanese, one speaks Japanese and expects English, and one does both inside a single session.
+- **Conversation** interprets in *both* directions — one case speaks English and expects Japanese, one speaks Japanese and expects English, and one does both inside a single session. A fourth speaks French into an English/Japanese session and expects Japanese, pinning the routing described in [Speech in a Third Language](#speech-in-a-third-language) — left alone the model sent it to English.
 - **Simultaneous** translates one way into the target, and stays silent when the input is already in the target language. That silence case guards [`echo_target_language=False`](#echo-handling).
 - **Agent** translates one way, source to target. Not reachable from the UI, still served.
 - **Coverage** runs the remaining language pairs through the default mode.

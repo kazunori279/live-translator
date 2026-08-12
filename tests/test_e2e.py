@@ -159,6 +159,19 @@ TEST_CASES = [
         ],
         expect=["ja", "en"],
     ),
+    Case(
+        # A booth or a lecture hall carries speech the session was not set up
+        # for. Silence is what you actually want here and the model will not do
+        # it — told to produce nothing it translated the French anyway or
+        # parroted it back verbatim, across four phrasings and ten attempts. It
+        # is going to speak, so the instruction routes it instead, and this pins
+        # the routing: left alone it sent French to English, the one language in
+        # an en/ja room nobody needs it in. Japanese is the audience's language.
+        "Conversation: third language routed to the target",
+        "convo", "en", "ja",
+        [Utterance("fr", "Bonjour, je voudrais un café s'il vous plaît.")],
+        expect=["ja"],
+    ),
     # --- simultaneous mode ---
     Case(
         "Simul: translates into the target",
