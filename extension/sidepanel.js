@@ -135,8 +135,9 @@ function option(value, text) {
 function bind() {
   for (const [id, key] of [
     ["tabEnabled", "tabEnabled"],
+    ["tabCaptions", "tabCaptions"],
     ["micEnabled", "micEnabled"],
-    ["captions", "captions"],
+    ["micCaptions", "micCaptions"],
   ]) {
     el(id).addEventListener("change", () => update({ [key]: el(id).checked }));
   }
@@ -156,17 +157,22 @@ async function update(patch) {
   Object.assign(settings, patch);
   await saveSettings(patch);
   render();
-  if (running && !("duckLevel" in patch)) {
-    // Languages, direction and mode are all baked into the relay's session
-    // config, so a change to any of them only takes effect on reconnect.
+  // Languages, direction and mode are all baked into the relay's session
+  // config, so a change to any of them only takes effect on reconnect. The duck
+  // level and the two subtitle switches are not part of that config — they are
+  // read live from storage — and cutting the audio to apply a checkbox would be
+  // worse than the checkbox.
+  const live = ["duckLevel", "tabCaptions", "micCaptions"];
+  if (running && !Object.keys(patch).every((key) => live.includes(key))) {
     await restart();
   }
 }
 
 function render() {
   el("tabEnabled").checked = settings.tabEnabled;
+  el("tabCaptions").checked = settings.tabCaptions;
   el("micEnabled").checked = settings.micEnabled;
-  el("captions").checked = settings.captions;
+  el("micCaptions").checked = settings.micCaptions;
   el("tabTarget").value = settings.tabTarget;
   el("micSource").value = settings.micSource;
   el("micTarget").value = settings.micTarget;

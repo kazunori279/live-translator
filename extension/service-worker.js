@@ -118,9 +118,46 @@ async function start() {
   if (!started.ok) throw new Error(started.error);
 
   await chrome.storage.session.set({ running: true, capturedTabId: tabId });
-  if (tabId != null && settings.captions) await injectCaptions(tabId);
+  await ensureCaptionTab(settings);
   return { capturedTabId: tabId };
 }
+
+/** Are subtitles wanted by either of the directions that are actually running? */
+function wantsCaptions(settings) {
+  return (
+    (settings.tabEnabled && settings.tabCaptions) || (settings.micEnabled && settings.micCaptions)
+  );
+}
+
+/**
+ * Put the overlay on a page and remember which one, so the offscreen document's
+ * transcripts have somewhere to go.
+ *
+ * The captured tab is the obvious target, but the microphone direction can run
+ * on its own, with nothing captured. Its subtitles still have to land
+ * somewhere, and the tab the toolbar icon was clicked on is both the sensible
+ * choice and the only one `activeTab` lets us inject into.
+ */
+async function ensureCaptionTab(settings) {
+  if (!wantsCaptions(settings)) return;
+  const existing = (await chrome.storage.session.get("captionTabId")).captionTabId;
+  if (existing != null) return;
+  const { capturedTabId } = await chrome.storage.session.get("capturedTabId");
+  const tabId = capturedTabId ?? (await targetTab().catch(() => null))?.id ?? null;
+  if (tabId == null) return;
+  await chrome.storage.session.set({ captionTabId: tabId });
+  await injectCaptions(tabId);
+}
+
+// Both subtitle switches apply mid-session — the offscreen document just stops
+// forwarding — but turning one on when neither was on at Start means there is
+// no overlay to forward to yet. A storage change wakes this worker, so the
+// injection can happen then rather than costing a reconnect.
+chrome.storage.onChanged.addListener(async (changes, area) => {
+  if (area !== "local" || (!changes.tabCaptions && !changes.micCaptions)) return;
+  const { running } = await chrome.storage.session.get("running");
+  if (running) await ensureCaptionTab(await loadSettings());
+});
 
 /**
  * Message the offscreen document, tolerating a document that exists but whose
@@ -146,11 +183,12 @@ async function stop() {
     await toOffscreen({ type: "stop" }).catch(() => {});
     await chrome.offscreen.closeDocument();
   }
-  const { capturedTabId } = await chrome.storage.session.get("capturedTabId");
-  if (capturedTabId != null) {
-    await sendToCaptions({ type: "teardown" }).catch(() => {});
-  }
-  await chrome.storage.session.set({ running: false, capturedTabId: null });
+  await sendToCaptions({ type: "teardown" }).catch(() => {});
+  await chrome.storage.session.set({
+    running: false,
+    capturedTabId: null,
+    captionTabId: null,
+  });
   return {};
 }
 
@@ -190,10 +228,10 @@ async function injectCaptions(tabId) {
 }
 
 async function sendToCaptions(payload) {
-  const { capturedTabId } = await chrome.storage.session.get("capturedTabId");
-  if (capturedTabId == null) return;
+  const { captionTabId } = await chrome.storage.session.get("captionTabId");
+  if (captionTabId == null) return;
   try {
-    await chrome.tabs.sendMessage(capturedTabId, { target: "captions", ...payload });
+    await chrome.tabs.sendMessage(captionTabId, { target: "captions", ...payload });
   } catch {
     // No content script on that tab (injection refused, or the page navigated
     // out from under it). Nothing to do — the side panel has the transcript.
@@ -203,6 +241,12 @@ async function sendToCaptions(payload) {
 // A captured tab that goes away takes its stream with it, and the offscreen
 // document would sit there holding a dead MediaStream.
 chrome.tabs.onRemoved.addListener(async (tabId) => {
-  const { capturedTabId } = await chrome.storage.session.get("capturedTabId");
+  const { capturedTabId, captionTabId } = await chrome.storage.session.get([
+    "capturedTabId",
+    "captionTabId",
+  ]);
+  // A microphone-only run outlives the page it was subtitling; forget the
+  // overlay and keep going.
+  if (tabId === captionTabId) await chrome.storage.session.set({ captionTabId: null });
   if (tabId === capturedTabId) await stop();
 });

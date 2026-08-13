@@ -90,6 +90,11 @@ chrome.storage.onChanged.addListener((changes, area) => {
     state.settings.duckLevel = changes.duckLevel.newValue;
     applyDuck(state.ducked, true);
   }
+  // The subtitle switches are a filter on the fan-out below, nothing more, so
+  // they can be honoured mid-session without touching the audio graph.
+  for (const key of ["tabCaptions", "micCaptions"]) {
+    if (changes[key]) state.settings[key] = changes[key].newValue;
+  }
 });
 
 async function start({ streamId, settings, glossary }) {
@@ -349,18 +354,28 @@ function resume(ctx) {
  * Both are optional listeners — the panel may be closed and the page may have
  * refused injection — and `sendMessage` rejects when nobody is listening, so
  * every send here is fire-and-forget.
+ *
+ * The side panel always gets everything: it is the full transcript, and it can
+ * label each line with its direction. The page overlay is filtered per
+ * direction, because both directions share one page and subtitling your own
+ * speech over a video is a separate decision from subtitling the video.
  */
 function post(payload) {
   chrome.runtime.sendMessage({ target: "ui", ...payload }).catch(() => {});
-  if (payload.type === "transcript" && payload.side === "output") {
-    chrome.runtime
-      .sendMessage({ target: "sw", type: "caption", payload })
-      .catch(() => {});
-  } else if (payload.type === "turnComplete" || payload.type === "state") {
-    chrome.runtime
-      .sendMessage({ target: "sw", type: "caption", payload })
-      .catch(() => {});
+  const perDirection =
+    (payload.type === "transcript" && payload.side === "output") ||
+    payload.type === "turnComplete";
+  if (perDirection && !captionsOn(payload.direction)) return;
+  // `state` carries no direction: it is the stop signal that tears the overlay
+  // down, and it has to arrive whatever the switches say.
+  if (perDirection || payload.type === "state") {
+    chrome.runtime.sendMessage({ target: "sw", type: "caption", payload }).catch(() => {});
   }
+}
+
+function captionsOn(direction) {
+  if (!state.settings) return false;
+  return direction === "tab" ? !!state.settings.tabCaptions : !!state.settings.micCaptions;
 }
 
 /**

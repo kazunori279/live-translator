@@ -54,6 +54,10 @@
       /* One flex item, so the clip above applies to the wrapped block as a
          whole rather than to a bare text node and the dot separately. */
       .text { flex: 1 1 auto; min-width: 0; }
+      /* With both directions subtitled, two lines are on screen at once and
+         they are not interchangeable: one is the room, one is you. The accent
+         says which without spending a line on a label. */
+      .line.mic { border-left: 0.2rem solid rgba(138, 180, 248, 0.9); }
       .line.fade-out { animation: line-out 0.8s ease-in forwards; }
       .dot {
         display: inline-block; width: 0.5rem; height: 0.5rem;
@@ -70,25 +74,34 @@
   const linesEl = root.getElementById("lines");
   document.documentElement.appendChild(host);
 
-  let currentLine = null;
+  // The line each direction is currently extending. Keyed by direction rather
+  // than held as a single "current line": tab audio and the microphone are two
+  // independent sessions with their own sentence boundaries, and sharing one
+  // line would have each direction's increments overwrite the other's.
+  const openLines = new Map();
 
-  function addLine(text, partial) {
+  function addLine(direction, text, partial) {
     const div = document.createElement("div");
-    div.className = "line";
+    div.className = `line ${direction}`;
     const span = document.createElement("span");
     span.className = "text";
     div.appendChild(span);
     linesEl.appendChild(div);
-    currentLine = div;
-    while (linesEl.children.length > MAX_LINES) linesEl.removeChild(linesEl.firstChild);
+    openLines.set(direction, div);
+    while (linesEl.children.length > MAX_LINES) {
+      const dropped = linesEl.firstChild;
+      linesEl.removeChild(dropped);
+      for (const [key, line] of openLines) if (line === dropped) openLines.delete(key);
+    }
     setText(div, text, partial);
     if (!partial) scheduleFade(div);
   }
 
-  function updateLine(text, partial) {
-    if (!currentLine) return addLine(text, partial);
-    setText(currentLine, text, partial);
-    if (!partial) scheduleFade(currentLine);
+  function updateLine(direction, text, partial) {
+    const line = openLines.get(direction);
+    if (!line) return addLine(direction, text, partial);
+    setText(line, text, partial);
+    if (!partial) scheduleFade(line);
   }
 
   function setText(line, text, partial) {
@@ -103,12 +116,13 @@
     return d;
   }
 
-  function finalize() {
-    if (currentLine) {
-      currentLine.querySelector(".dot")?.remove();
-      scheduleFade(currentLine);
+  function finalize(direction) {
+    const line = openLines.get(direction);
+    if (line) {
+      line.querySelector(".dot")?.remove();
+      scheduleFade(line);
     }
-    currentLine = null;
+    openLines.delete(direction);
   }
 
   function scheduleFade(el) {
@@ -137,11 +151,10 @@
     if (msg.type === "teardown" || (msg.type === "state" && msg.running === false)) {
       teardown();
     } else if (msg.type === "turnComplete") {
-      finalize();
+      finalize(msg.direction);
     } else if (msg.type === "transcript") {
-      if (currentLine) updateLine(msg.text, !msg.finished);
-      else addLine(msg.text, !msg.finished);
-      if (msg.finished) currentLine = null;
+      updateLine(msg.direction, msg.text, !msg.finished);
+      if (msg.finished) openLines.delete(msg.direction);
     }
   }
   chrome.runtime.onMessage.addListener(onMessage);
