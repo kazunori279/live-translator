@@ -4,7 +4,7 @@ Real-time audio translation powered by Gemini Live API. Speak in any language an
 
 ![Demo](demo.gif)
 
-Also in this repo: a **[Chrome extension](#chrome-extension)** that translates the audio of a browser tab — a video, a webinar, the remote side of a call — which a web page cannot reach on its own.
+A browser tab's audio — a video, a webinar, the remote side of a call — is something a web page cannot reach, so that case grew a Chrome extension of its own: **[Interpretab](https://github.com/kazunori279/interpretab)**, now a separate repo that talks to the Gemini Live API directly ([why](#chrome-extension--interpretab)).
 
 ## Slides
 
@@ -151,47 +151,17 @@ Playing the translation through a PA system, a mixing desk, or a second computer
 
 ---
 
-## Chrome Extension
+## Chrome Extension → Interpretab
 
-The web app can only translate what a microphone hears. That covers a booth or a meeting room, but not the case people keep asking for: a video, a webinar, or the remote side of a Google Meet call **already playing in a browser tab**. A web page cannot reach another tab's audio. A Chrome extension can, and that is the reason `extension/` exists.
+The web app can only translate what a microphone hears. That covers a booth or a meeting room, but not the case people keep asking for: a video, a webinar, or the remote side of a Google Meet call **already playing in a browser tab**. A web page cannot reach another tab's audio. A Chrome extension can, and that extension used to live in `extension/` here.
 
-It translates two things, independently, and either can be switched off:
+It has moved to its own repository: **[kazunori279/interpretab](https://github.com/kazunori279/interpretab)**.
 
-| Direction | What it hears | Model | You choose |
-|---|---|---|---|
-| **Tab audio** | whatever the current tab is playing | `gemini-3.5-live-translate-preview` — [simultaneous translation](#simultaneous-translation), source auto-detected | the target language only |
-| **Microphone** | you | `gemini-3.1-flash-live-preview` — one-way agent mode, so the [glossary](#glossary) applies | source and target |
+The reason for the split is architectural rather than cosmetic. The extension in this repo was a *second client of this relay* — the same `/ws/{user_id}/{session_id}` endpoint, the same server holding `GOOGLE_API_KEY`. That is fine for the author's own laptop and impossible to publish: every installer's audio would go through one `--max-instances 1` Cloud Run service that the author pays for. Interpretab drops the relay entirely, opens the Gemini Live API directly from the browser with the user's own key, and carries the session management that used to live in `app/main.py` into JavaScript. There is no server in it at all, which is what makes a public Chrome Web Store listing honest.
 
-The tab direction is fixed to the simultaneous model rather than offered as a choice. A tab plays whoever it plays — a video cuts to a second speaker, a call hands over to someone else — so naming a source language up front is a promise the listener cannot keep. Auto-detect is the only setting that survives contact with real tab audio, which is why there is no source-language picker on that side.
+What that repo has that this one never did: bring-your-own-key setup, the wire-level `setup` frame instead of the SDK's flattened config, and a JavaScript port of the GoAway cutover with its own unit tests. What it deliberately left behind: the stalled-drain mirroring in [GoAway Handling](#goaway-handling) below, which makes a cutover lossless rather than merely short.
 
-The extension talks to the same relay the web app does, so it needs no API key of its own. It ships with the two Cloud Run regions and `http://localhost:8000` as presets.
-
-### Install
-
-The extension is not on the Web Store; load it unpacked.
-
-1. Open `chrome://extensions` and turn on **Developer mode** (top right).
-2. Click **Load unpacked** and pick the `extension/` directory of this repo.
-3. Open the page you want to translate and **click the Live Translator toolbar icon on that tab**. This is not optional — the click is what grants access to the tab, and Start fails without it.
-4. Pick your languages in the side panel and click **Start**. Chrome asks once for access to the relay's address; allow it.
-
-Chrome 116 or newer. Changing the backend in **Options** prompts for that address the next time you press Start.
-
-### What you hear
-
-Capturing a tab mutes it for you, so the extension plays the original back itself — and because it owns that playback, it can **duck** it: the original drops to the level set by the *Original volume while speaking* slider (15% by default) while the translated voice is talking, and returns to full volume when it stops. It is speech-activated, not constant, so a film's score is not held at 15% through every silence.
-
-Subtitles go on the page itself, bottom-centre, three lines rolling. They follow the video into fullscreen. Each direction has its own *Subtitles on the page* checkbox — on for tab audio, off for the microphone — so you can subtitle the video without also subtitling yourself. With both on, the two share the page but not a line: each keeps its own rolling sentence, and the microphone's is marked with a blue edge. Toggling either one applies immediately, without dropping the session; the side panel keeps the full transcript either way.
-
-With both directions running, the microphone is **gated while a translation is playing** — its audio is dropped rather than sent, so the interpreter never interprets itself. This is stricter than what the web app can do, because here the extension owns both ends of the loop.
-
-### Limitations
-
-- **The microphone direction's translated speech can only reach your own speakers.** Getting it into a Meet or Zoom microphone needs a virtual audio device (BlackHole, VB-Cable); no extension can do it. For a call, that direction is useful for subtitles and for people physically in the room — not for the remote party.
-- **Running both directions on speakers reinvites the [echo loop](#echo-and-feedback).** Echo cancellation and the duplex gate help; headphones are still the real answer.
-- **The tab direction takes no glossary.** The simultaneous-translation model supports neither a glossary nor system instructions, and that direction always uses it. Terms are still rewritten in the microphone direction.
-- **Two directions means two concurrent Live sessions**, so roughly double the API cost. The side panel says so when both are on.
-- Chrome refuses script injection on its own pages, the Web Store, and PDFs, so subtitles do not appear there. Capture and the side-panel transcript still work.
+The MV3 findings from building it are still worth reading, and stay here: [Chrome Extension Internals](#chrome-extension-internals).
 
 ---
 
@@ -302,7 +272,7 @@ Fullscreen needs its own click, separate from *Select Window*: `requestFullscree
 
 ### Chrome Extension Internals
 
-The server needs no changes for the extension: `/ws/{user_id}/{session_id}`, its `source`/`target`/`simul`/`convo` query params and its setup frame are already everything a second client needs. Everything below is client-side.
+The code now lives in [Interpretab](https://github.com/kazunori279/interpretab), but the MV3 findings came out of building it here and are the part worth keeping. The server needed no changes at all for it: `/ws/{user_id}/{session_id}`, its `source`/`target`/`simul`/`convo` query params and its setup frame were already everything a second client needs. Everything below is client-side, and all of it survived the move.
 
 ```
 service-worker.js     switchboard only. Action click → tabCapture.getMediaStreamId(),
@@ -311,7 +281,7 @@ service-worker.js     switchboard only. Action click → tabCapture.getMediaStre
 offscreen.js          the engine. Owns every MediaStream, AudioContext and WebSocket.
 sidepanel.js          controls and the transcript. Closing it does not stop capture.
 content/captions.js   subtitles in a closed shadow root, injected on demand.
-options.js            backend URL, voice, glossary CSV.
+options.js            backend URL (now an API key), voice, glossary CSV.
 ```
 
 **Why an offscreen document.** An MV3 service worker is torn down after ~30 seconds idle, and a side panel dies when it is closed — neither can hold a live capture. An offscreen document created with `USER_MEDIA` + `AUDIO_PLAYBACK` has a lifetime independent of both, so putting the engine there removes the need for any keepalive hack. The service worker keeps what little state it has in `chrome.storage.session`, never in a module variable.
@@ -333,9 +303,9 @@ both sockets' audio ─► ctxDown (24 kHz) ─► pcm-player-processor ─► s
 
 **Two directions are two independent sessions, all the way down.** Each opens its own browser WebSocket to `/ws/chrome-extension/{tab|mic}-{random}`, which the server backs with its own Gemini Live session — different models, different query params, no shared state, and the API cost of both. They also share exactly one page overlay, so the caption path carries a `direction` and everything downstream is keyed by it: the offscreen document filters the fan-out against that direction's *Subtitles on the page* switch, and the content script keeps one open line per direction rather than a single current line. Without that key, whichever direction spoke last would overwrite the other's sentence mid-word. A microphone-only run has no captured tab, so the overlay goes on the tab the toolbar icon was clicked on — `activeTab` covers that one either way.
 
-**Permissions are kept small.** No content script is declared and there is no `<all_urls>`: subtitles are injected with `chrome.scripting.executeScript` under `activeTab`, which the toolbar click already grants. The backend origin is an `optional_host_permission` requested on the Start click, because the URL is configurable and cannot be baked into the manifest.
+**Permissions are kept small.** No content script is declared and there is no `<all_urls>`: subtitles are injected with `chrome.scripting.executeScript` under `activeTab`, which the toolbar click already grants. Here the backend origin had to be an `optional_host_permission` requested on the Start click, because the relay URL is configurable and cannot be baked into a manifest; the direct version has a single fixed host permission instead, which is both simpler and a better answer to a store reviewer.
 
-**Bundled worklets.** MV3 forbids remote code, so `extension/audio/` carries byte-identical copies of `app/static/js/pcm-recorder-processor.js` and `pcm-player-processor.js`. They are 16 and 50 lines; copying beats adding a build step, and [the asset test](#extension-asset-test) fails if the copies drift.
+**Bundled worklets.** MV3 forbids remote code, so the extension carries its own copies of `app/static/js/pcm-recorder-processor.js` and `pcm-player-processor.js` rather than fetching them from the server. They are 16 and 50 lines; copying beat adding a build step. While both lived in this repo an asset test asserted the copies were byte-identical, because a stale copy keeps working while sounding wrong — worth knowing if you ever vendor a worklet.
 
 ### Changing the Default Glossary
 
@@ -544,20 +514,6 @@ The cases cover a term split three ways with no `finished` message (captured fro
 
 ```bash
 uv run python tests/test_glossary.py
-```
-
-```
-8/8 passed
-```
-
-### Extension Asset Test
-
-`tests/test_extension_assets.py` guards the [Chrome extension](#chrome-extension) against the two failure modes that are silent in Chrome. It asserts the bundled audio worklets are byte-identical to the ones in `app/static/js/` — MV3 forbids remote code, so the extension ships copies, and a stale copy keeps working while sounding wrong. Then it walks every relative path the extension references (manifest entries, HTML `src`/`href`, ES imports, `addModule` and `executeScript` literals) and asserts each resolves, because Chrome reports a typo as a blank side panel or a worklet that never registers rather than as an error naming the path. A handful of manifest invariants come along with it: MV3, the required permissions, the Chrome 116 floor that `getMediaStreamId` from a service worker needs, and no install-time host permissions.
-
-Offline, like the glossary test.
-
-```bash
-uv run python tests/test_extension_assets.py
 ```
 
 ```
