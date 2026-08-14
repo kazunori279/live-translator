@@ -34,6 +34,31 @@ let convoMode = !simulMode;
 const sourceLangSelect = document.getElementById("sourceLang");
 const targetLangSelect = document.getElementById("targetLang");
 
+// The language pair is the first thing anyone sets and rarely the thing they
+// want to change, so it is remembered per browser like the Simul toggle above.
+const LANG_KEYS = {
+  sourceLang: "live-translator.sourceLang",
+  targetLang: "live-translator.targetLang",
+};
+const DEFAULT_LANGS = { sourceLang: "en", targetLang: "ja" };
+
+function storedLang(hiddenInput) {
+  return localStorage.getItem(LANG_KEYS[hiddenInput.id]) || DEFAULT_LANGS[hiddenInput.id];
+}
+
+function rememberLang(hiddenInput, code) {
+  localStorage.setItem(LANG_KEYS[hiddenInput.id], code);
+}
+
+// Seed the inputs before anything reads them. The first WebSocket opens while
+// the language list is still being fetched, so it takes whatever these hold —
+// leave them on the markup's en/ja and the restored pair is only on screen,
+// with the session itself running on the wrong languages until something else
+// forces a reconnect. The stored target is already in the current mode's code
+// set, so it needs no mapping here.
+sourceLangSelect.value = storedLang(sourceLangSelect);
+targetLangSelect.value = storedLang(targetLangSelect);
+
 // Hide subtitle when it would overlap controls or when header wraps
 {
   const subtitle = document.querySelector(".subtitle");
@@ -68,6 +93,7 @@ function populateDropdown(hiddenInput, trigger, dropdown, selectedCode, language
     div.dataset.value = code;
     div.addEventListener("click", () => {
       hiddenInput.value = code;
+      rememberLang(hiddenInput, code);
       trigger.textContent = languages[code];
       dropdown.querySelectorAll(".custom-select-option").forEach(o => o.classList.remove("selected"));
       div.classList.add("selected");
@@ -123,18 +149,34 @@ let simulLangs = {}, simulPopularList = [], simulAllCodes = [];
 const AGENT_TO_SIMUL = { "zh": "zh-Hans", "iw": "he", "pt": "pt-BR" };
 const SIMUL_TO_AGENT = { "zh-Hans": "zh", "zh-Hant": "zh", "he": "iw", "pt-BR": "pt", "pt-PT": "pt" };
 
-function rebuildTargetDropdown() {
+/**
+ * Repopulate the target dropdown for whichever mode is now active.
+ *
+ * *preferred* is for restoring a stored choice: the two modes do not share a
+ * code set, and a stored simul-only variant (`zh-Hant`, `pt-PT`) has no agent
+ * equivalent to come back through, so it is handed in directly rather than
+ * round-tripped and flattened to `zh` / `pt`.
+ */
+function rebuildTargetDropdown(preferred) {
   const langs = simulMode ? simulLangs : agentLangs;
   const popular = simulMode ? simulPopularList : agentPopular;
   const codes = simulMode ? simulAllCodes : agentAllCodes;
   const mapTable = simulMode ? AGENT_TO_SIMUL : SIMUL_TO_AGENT;
-  let current = targetLangSelect.value;
+  let current = preferred ?? targetLangSelect.value;
   if (!(current in langs) && current in mapTable) current = mapTable[current];
   populateDropdown(
     targetLangSelect, document.getElementById("targetLangTrigger"),
     document.getElementById("targetLangDropdown"), current, langs, popular, codes
   );
+  // Store the code for the mode actually on screen, so the next visit restores
+  // the variant that was showing rather than the one it was mapped from.
+  rememberLang(targetLangSelect, targetLangSelect.value);
 }
+
+// What the live session was actually opened with, as opposed to what the
+// dropdowns show — the two can drift apart while the language list loads.
+let connectedSource = null;
+let connectedTarget = null;
 
 async function loadLanguages() {
   const resp = await fetch("/api/languages");
@@ -152,16 +194,33 @@ async function loadLanguages() {
   simulPopularList = data.simulPopular;
   simulAllCodes = Object.keys(simulLangs).sort((a, b) => simulLangs[a].localeCompare(simulLangs[b]));
 
+  // Both dropdowns are built from the agent code set first, whatever the mode,
+  // so a target stored while in Simul has to come back through the reverse map
+  // to be found here at all — otherwise it reads as unknown and the stored
+  // choice is quietly replaced by the first popular language.
+  const savedTarget = storedLang(targetLangSelect);
+  const agentTarget = savedTarget in agentLangs ? savedTarget : (SIMUL_TO_AGENT[savedTarget] ?? savedTarget);
+
   setupCustomSelect(
     sourceLangSelect, document.getElementById("sourceLangTrigger"),
-    document.getElementById("sourceLangDropdown"), "en", agentLangs, agentPopular, agentAllCodes
+    document.getElementById("sourceLangDropdown"), storedLang(sourceLangSelect),
+    agentLangs, agentPopular, agentAllCodes
   );
   setupCustomSelect(
     targetLangSelect, document.getElementById("targetLangTrigger"),
-    document.getElementById("targetLangDropdown"), "ja", agentLangs, agentPopular, agentAllCodes
+    document.getElementById("targetLangDropdown"), agentTarget,
+    agentLangs, agentPopular, agentAllCodes
   );
 
-  if (simulMode) rebuildTargetDropdown();
+  if (simulMode) rebuildTargetDropdown(savedTarget);
+
+  // A stored code the server no longer offers has just been replaced by a
+  // fallback, and Simul remaps the target on top of that. Either way the
+  // session opened a moment ago is on a pair that is no longer on screen, so
+  // reopen it rather than leave the two disagreeing.
+  if (sourceLangSelect.value !== connectedSource || targetLangSelect.value !== connectedTarget) {
+    reconnectWithNewLanguage();
+  }
 }
 loadLanguages();
 
@@ -169,6 +228,8 @@ function getWebSocketUrl() {
   const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
   const source = sourceLangSelect.value;
   const target = targetLangSelect.value;
+  connectedSource = source;
+  connectedTarget = target;
   let url = wsProtocol + "//" + window.location.host + "/ws/" + userId + "/" + sessionId + "?source=" + source + "&target=" + target;
   if (simulMode) url += "&simul=true";
   if (convoMode) url += "&convo=true";

@@ -42,7 +42,7 @@ Open http://localhost:8000.
 
 ### Basic Usage
 
-1. Pick your two languages at the bottom of the screen.
+1. Pick your two languages at the bottom of the screen. Your choice is remembered by this browser, so the pair you use every day is already set the next time you open the app.
 2. Click **Start**, and allow microphone access when the browser asks.
 3. Talk. What you said appears as text, and the translation is spoken aloud.
 
@@ -267,6 +267,11 @@ Each entry stores **both `deviceId` and label**. A `deviceId` is perishable — 
 The voice is part of the Live session's config, so changing it requires a reconnect (which clears the transcript); microphone and speaker changes do not. Unknown voice names sent by a client are rejected server-side and fall back to `Puck`, since the Live API refuses to connect on an unrecognised voice.
 
 Language selections survive a mode switch: codes are mapped between the two language sets in both directions (e.g. `zh` ↔ `zh-Hans`, `iw` ↔ `he`, `pt` ↔ `pt-BR`).
+
+They also survive a reload, stored under `live-translator.sourceLang` / `targetLang`. Two details make that work:
+
+- **The target is stored in the code set of the mode that was on screen**, and restored straight into that mode rather than mapped in and back out. A round trip through the agent table would flatten the simul-only variants — `zh-Hant` and `pt-PT` have no agent equivalent, so they would come back as `zh-Hans` and `pt-BR`.
+- **The stored pair is written into the hidden inputs at module load, before the first `connectWebsocket()`.** That call is synchronous while `loadLanguages()` is still fetching, so it takes whatever the inputs hold; left on the markup defaults, the session would open on `en`/`ja` while the dropdowns showed something else. Once the fetch resolves, the pair the socket was opened with is compared against the dropdowns and the session is reopened if a stored code turned out to be one the server no longer offers and the dropdown fell back.
 
 ### Caption Overlay Internals
 
