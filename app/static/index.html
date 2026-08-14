@@ -134,7 +134,19 @@
                 <input type="hidden" id="targetLang" value="ja">
               </div>
             </div>
-            <button type="button" id="startAudioButton" disabled>Start</button>
+            <!-- Input and output each get their own button, side by side, so
+                 "which one am I silencing" is answered by the icon rather than
+                 by reading a label: a mic glyph and a speaker glyph, both
+                 struck through and greyed when muted. -->
+            <div class="av-controls">
+              <button type="button" id="startAudioButton" disabled>Start</button>
+              <!-- Available before Start as well as after: on a PA, or anywhere
+                   the translation is not meant to come out of this machine,
+                   pre-muting is the difference between silence and the first
+                   sentence going out loud before it can be stopped. -->
+              <button type="button" id="outputMuteButton" aria-pressed="false"
+                      title="Mute the translated speech">Sound on</button>
+            </div>
             <div class="toggle-group">
               <label class="ptt-toggle">
                 <input type="checkbox" id="simulToggle">

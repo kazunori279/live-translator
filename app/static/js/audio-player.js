@@ -36,7 +36,12 @@ export async function startAudioPlayerWorklet(devicePrefs) {
   await audioContext.audioWorklet.addModule(workletURL);
 
   const audioPlayerNode = new AudioWorkletNode(audioContext, 'pcm-player-processor');
-  audioPlayerNode.connect(audioContext.destination);
+  // Output mute rides on a gain node rather than on the worklet, so it can be
+  // ramped. Dropping straight to zero on a waveform mid-cycle is an audible
+  // click, and the mute is most often reached for while the model is speaking.
+  const gainNode = audioContext.createGain();
+  audioPlayerNode.connect(gainNode);
+  gainNode.connect(audioContext.destination);
 
-  return [audioPlayerNode, audioContext, sinkId];
+  return [audioPlayerNode, audioContext, sinkId, gainNode];
 }

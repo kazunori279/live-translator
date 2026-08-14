@@ -46,7 +46,10 @@ Open http://localhost:8000.
 2. Click **Start**, and allow microphone access when the browser asks.
 3. Talk. What you said appears as text, and the translation is spoken aloud.
 
-Once you are running, **Start** turns into **Mute**. Muting stops sending your voice but keeps the microphone ready, so unmuting is instant and the browser won't ask for permission again.
+Two buttons sit side by side, one for each direction of audio. A struck-through icon and a grey background mean that side is silenced.
+
+- **Mic on / Mic off** is what **Start** becomes once you are running. Muting stops sending your voice but keeps the microphone ready, so unmuting is instant and the browser won't ask for permission again.
+- **Sound on / Sound off** silences the spoken translation coming out of this machine. Translation carries on regardless — the transcript and the [caption overlay](#caption-overlay) keep filling in, so muting the sound is not the same as stopping. It works before **Start** as well as during a session, which is what you want when the audio is meant to reach a PA or another device rather than your own speakers: pre-mute and the first sentence never comes out loud.
 
 ### Conversation (default)
 
@@ -145,7 +148,8 @@ The app pushes back on this in several ways ([how](#echo-handling)), but they on
 1. **Put on headphones.** This breaks the loop at the source and always works.
 2. **Set the speaker back to System Default** in Voice & Audio. Sending audio anywhere else switches off the browser's echo cancellation — this is the most common cause of bad echo.
 3. **Turn the volume down**, or move the microphone further from the speakers.
-4. **Mute** while the translation is playing.
+4. **Mic off** while the translation is playing, so the microphone isn't open to hear it.
+5. **Sound off**, if this machine doesn't need to play the translation at all — with nothing coming out of the speakers there is no loop to close, and the transcript and captions carry on as normal.
 
 Playing the translation through a PA system, a mixing desk, or a second computer defeats echo cancellation completely, because the sound never goes through this browser. In those setups headphones or a close-up microphone aren't optional.
 

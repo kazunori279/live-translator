@@ -18,6 +18,11 @@ let audioInitialized = false;
 // second life: audioInitialized flips before the mic is actually up.
 let micRunning = false;
 let micMuted = false;
+// Silences the translated speech without touching the microphone: the room
+// still gets translated, this listener just stops hearing it out loud. Wanted
+// whenever the audio is going somewhere else — a PA, another laptop, or the
+// person next to you reading the captions instead.
+let outputMuted = false;
 
 const SIMUL_KEY = "live-translator.simul";
 let simulMode = localStorage.getItem(SIMUL_KEY) === "true";
@@ -416,7 +421,12 @@ function connectWebsocket() {
         if (part.inlineData) {
           const mimeType = part.inlineData.mimeType;
           const data = part.inlineData.data;
-          if (mimeType && mimeType.startsWith("audio/pcm") && audioPlayerNode) {
+          // Muted output drops the chunk rather than just turning the gain
+          // down: the model streams far faster than realtime, so a minute of
+          // muted speech would otherwise sit in the worklet's ring buffer and
+          // pour out on unmute. Unmuting resumes with whatever is being said
+          // then, which is what a mute is expected to do.
+          if (mimeType && mimeType.startsWith("audio/pcm") && audioPlayerNode && !outputMuted) {
             audioPlayerNode.port.postMessage(base64ToArray(data));
           }
         }
@@ -488,6 +498,7 @@ function base64ToArray(base64) {
 
 let audioPlayerNode;
 let audioPlayerContext;
+let audioPlayerGain;
 let audioRecorderNode;
 let audioRecorderContext;
 let micStream;
@@ -525,7 +536,7 @@ function startAudio() {
       is_audio = false;
       micRunning = false;
       micMuted = false;
-      updateMicButton();
+      updateAudioControls();
       startAudioButton.disabled = false;
       addSystemMessage(`Could not start audio: ${errMsg}`);
       return;
@@ -536,15 +547,16 @@ function startAudio() {
         ? `Ready to translate into ${tgt}`
         : `Ready to interpret between ${src} and ${tgt}`
     );
+    // Either way there is now playback to silence, so the speaker button
+    // appears — push-to-talk already owns the microphone, but not the output.
     if (pttMode) {
-      startAudioButton.disabled = false;
       is_audio = false;
     } else {
-      // The mic is live, so the button turns into Mute.
+      // The mic is live, so the button turns into the microphone toggle.
       micRunning = true;
-      updateMicButton();
-      startAudioButton.disabled = false;
     }
+    updateAudioControls();
+    startAudioButton.disabled = false;
   }
 
   const watchdog = setTimeout(
@@ -552,10 +564,14 @@ function startAudio() {
     AUDIO_START_WATCHDOG_MS
   );
 
-  startAudioPlayerWorklet(outputPrefs).then(([node, ctx, sinkId]) => {
+  startAudioPlayerWorklet(outputPrefs).then(([node, ctx, sinkId, gain]) => {
     audioPlayerNode = node;
     audioPlayerContext = ctx;
     activeOutputDeviceId = sinkId;
+    audioPlayerGain = gain;
+    // A fresh gain node starts at 1, so a mute set before this resolved (or
+    // carried over from the previous player) has to be re-applied.
+    applyOutputGain();
   }).catch((err) => {
     // Playback is not fatal — transcripts still work without audio out.
     console.error("Audio player failed to start:", err);
@@ -591,6 +607,7 @@ document.addEventListener("visibilitychange", () => {
 });
 
 const startAudioButton = document.getElementById("startAudioButton");
+const outputMuteButton = document.getElementById("outputMuteButton");
 const pttToggle = document.getElementById("pttToggle");
 const simulToggle = document.getElementById("simulToggle");
 
@@ -653,21 +670,78 @@ function sessionDescription() {
     : `${src} ⇄ ${tgt} (Conversation)`;
 }
 
-// The Start button doubles as the microphone mute control once audio is
-// running: in always-on mode there is nothing else left to click, and a mic
-// that cannot be silenced is a hazard in a room left connected.
-function updateMicButton() {
-  if (pttMode) return;
+// Ramp constant for the output mute, in seconds. This is setTargetAtTime's
+// time constant, so the audible settle is roughly three times it: fast enough
+// to feel instant, slow enough that cutting a waveform mid-cycle — which is
+// what a mute reached for mid-sentence always does — is not heard as a click.
+const OUTPUT_MUTE_RAMP_SEC = 0.015;
+// Leaves the ramp time to finish before the queued audio is dropped, so a mute
+// lands as a short fade rather than as a cut.
+const OUTPUT_FLUSH_DELAY_MS = 80;
+let outputFlushTimer = null;
+
+/** Push `outputMuted` onto the gain node, if a player is up yet. */
+function applyOutputGain() {
+  if (!audioPlayerGain || !audioPlayerContext) return;
+  const t = audioPlayerContext.currentTime;
+  audioPlayerGain.gain.cancelScheduledValues(t);
+  audioPlayerGain.gain.setTargetAtTime(outputMuted ? 0 : 1, t, OUTPUT_MUTE_RAMP_SEC);
+}
+
+function setOutputMuted(muted) {
+  outputMuted = muted;
+  applyOutputGain();
+  clearTimeout(outputFlushTimer);
+  if (muted) {
+    // Whatever is already queued is unwanted too, so drop it once the fade has
+    // played. Arriving chunks are refused from here on, so the worklet's buffer
+    // stays empty for as long as the mute lasts.
+    outputFlushTimer = setTimeout(() => {
+      if (audioPlayerNode) audioPlayerNode.port.postMessage({ command: "endOfAudio" });
+    }, OUTPUT_FLUSH_DELAY_MS);
+  }
+  updateAudioControls();
+}
+
+/**
+ * Paint both audio controls from the current state.
+ *
+ * The Start button doubles as the microphone control once audio is running: in
+ * always-on mode there is nothing else left to click, and a mic that cannot be
+ * silenced is a hazard in a room left connected. The speaker button sits next
+ * to it and answers a different question, so it is always live: before Start,
+ * after it, and in push-to-talk, where the microphone is the Start button's
+ * job and the output is all that is left to mute.
+ *
+ * The labels say what is *on* rather than what a click would do: with two
+ * near-identical buttons side by side, "Mute" does not say mute what. Icon and
+ * colour carry the state; aria-pressed and the tooltip carry the action.
+ */
+function updateAudioControls() {
+  outputMuteButton.textContent = outputMuted ? "Sound off" : "Sound on";
+  outputMuteButton.classList.toggle("muted", outputMuted);
+  outputMuteButton.setAttribute("aria-pressed", String(outputMuted));
+  outputMuteButton.title = outputMuted
+    ? "Play the translated speech out loud again"
+    : "Mute the translated speech";
+
+  if (pttMode) return; // push-to-talk owns the Start button's label and colour
   if (!micRunning) {
     startAudioButton.textContent = "Start";
     startAudioButton.classList.remove("muted");
+    startAudioButton.removeAttribute("aria-pressed");
+    startAudioButton.removeAttribute("title");
     return;
   }
-  startAudioButton.textContent = micMuted ? "Unmute" : "Mute";
+  startAudioButton.textContent = micMuted ? "Mic off" : "Mic on";
   startAudioButton.classList.toggle("muted", micMuted);
+  startAudioButton.setAttribute("aria-pressed", String(micMuted));
+  startAudioButton.title = micMuted
+    ? "Send your voice to the translator again"
+    : "Stop sending your voice to the translator";
 }
 
-// Always-on mode: click Start, then the same button mutes/unmutes.
+// Always-on mode: click Start, then the same button mutes/unmutes the mic.
 startAudioButton.addEventListener("click", () => {
   if (pttMode) return;
   if (micRunning) {
@@ -675,7 +749,7 @@ startAudioButton.addEventListener("click", () => {
     // instant and never re-prompts for permission.
     micMuted = !micMuted;
     is_audio = !micMuted;
-    updateMicButton();
+    updateAudioControls();
     addSystemMessage(micMuted ? "Microphone muted" : "Microphone unmuted");
     return;
   }
@@ -684,33 +758,46 @@ startAudioButton.addEventListener("click", () => {
   is_audio = true;
 });
 
+// The translated speech, silenced without touching what is being sent up: the
+// session keeps translating and the transcript keeps filling, this listener
+// just stops hearing it.
+outputMuteButton.addEventListener("click", () => {
+  setOutputMuted(!outputMuted);
+  addSystemMessage(
+    outputMuted ? "Translation audio muted" : "Translation audio unmuted"
+  );
+});
+
 // PTT toggle
 pttToggle.addEventListener("change", () => {
   pttMode = pttToggle.checked;
   if (pttMode) {
-    // PTT owns the button's label and colour, so drop the mute role.
+    // PTT owns the button's label and colour, so drop the mic-mute role. The
+    // speaker button is untouched — output mute is orthogonal to how the
+    // microphone is gated, and stays available in both modes.
     micRunning = false;
     micMuted = false;
     startAudioButton.classList.remove("muted");
+    startAudioButton.removeAttribute("aria-pressed");
+    startAudioButton.removeAttribute("title");
     startAudioButton.classList.add("ptt-mode");
+    startAudioButton.disabled = !audioInitialized;
+    startAudioButton.textContent = "Hold to Talk";
     if (!audioInitialized) {
-      startAudioButton.disabled = true;
-      startAudioButton.textContent = "Hold to Talk";
       initAudioIfNeeded();
       is_audio = true;
     } else {
-      startAudioButton.disabled = false;
-      startAudioButton.textContent = "Hold to Talk";
       is_audio = false;
     }
+    updateAudioControls();
   } else {
     startAudioButton.classList.remove("ptt-mode");
     startAudioButton.classList.remove("ptt-active");
-    startAudioButton.textContent = "Start";
     is_audio = false;
     audioInitialized = false;
     micRunning = false;
     micMuted = false;
+    updateAudioControls();
     reconnectWithNewLanguage();
   }
 });
@@ -1230,10 +1317,13 @@ async function restartRecorder() {
 async function restartPlayer() {
   if (!audioPlayerContext) return;
   await audioPlayerContext.close();
-  const [node, ctx, sinkId] = await startAudioPlayerWorklet(getPriority(AUDIO_OUTPUT_KEY));
+  const [node, ctx, sinkId, gain] = await startAudioPlayerWorklet(getPriority(AUDIO_OUTPUT_KEY));
   audioPlayerNode = node;
   audioPlayerContext = ctx;
   activeOutputDeviceId = sinkId;
+  audioPlayerGain = gain;
+  // Switching speakers must not un-mute the output.
+  applyOutputGain();
 }
 
 document.getElementById("applyAudio").addEventListener("click", () => {
