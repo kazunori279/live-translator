@@ -117,7 +117,15 @@
 
         <div class="input-container">
           <div class="input-wrapper">
-            <span class="auto-detect-label" id="autoDetectLabel" style="display:none">Translate to:</span>
+            <!-- Simul is one-way into the target and stays silent on speech
+                 that is already in it, which on screen is indistinguishable
+                 from a broken session: the input transcription appears and
+                 then nothing follows. The note is the only thing saying that
+                 the silence is deliberate. -->
+            <span class="auto-detect-label" id="autoDetectLabel" style="display:none">
+              Translate to:
+              <small class="simul-echo-note">Speech already in this language is not translated</small>
+            </span>
             <div class="language-selector">
               <div class="custom-select" id="sourceLangWrapper">
                 <button class="custom-select-trigger" id="sourceLangTrigger">English</button>

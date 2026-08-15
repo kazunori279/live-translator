@@ -165,10 +165,24 @@ h1 {
 .custom-select-dropdown::-webkit-scrollbar-track { background: #2d2d2d; }
 .custom-select-dropdown::-webkit-scrollbar-thumb { background: #555; border-radius: 4px; }
 
+/* Shown only in Simul, where JS clears the inline display:none — so the column
+   layout below is what the label takes when it is visible at all. */
 .auto-detect-label {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
   font-size: 1rem;
   color: #5f6368;
   white-space: nowrap;
+}
+
+/* Wraps, unlike the label above it, so a narrow window costs a second line
+   here rather than squeezing the dropdown next to it. */
+.simul-echo-note {
+  font-size: 0.7rem;
+  color: #80868b;
+  white-space: normal;
+  max-width: 11rem;
 }
 
 /* Sits between the two language dropdowns where a swap button used to be, but

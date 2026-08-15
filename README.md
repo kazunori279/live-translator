@@ -69,6 +69,7 @@ Switch on **Simul** for one-way translation: whatever the microphone hears, in w
 Good for a talk, a lecture, or a presentation — one speaker, an audience that needs one language.
 
 Compared with conversation mode:
+- **Speech already in the target language is left alone.** Say something in Japanese with Japanese selected and you get the transcription and nothing else — no translated text, no voice. That is deliberate, and it is this mode's only echo guard: its own output is by construction in the target language, so without it a microphone hearing the speakers would loop. The control bar says so under **Translate to:**. It also means testing the mode with a phrase in the target language looks exactly like a broken session.
 - **Nothing to configure but the output language** — it works out what is being spoken.
 - **78 languages** to choose from, rather than 97.
 - **The glossary doesn't steer the translation**, though your on-screen term substitutions still apply.
