@@ -59,6 +59,16 @@ function rememberLang(hiddenInput, code) {
 sourceLangSelect.value = storedLang(sourceLangSelect);
 targetLangSelect.value = storedLang(targetLangSelect);
 
+// Whether the two sides match is answerable without the language list, so the
+// pair is separated here as well as after the fetch. Left to the later pass
+// alone, every load of an affected browser would open a session on a pair it
+// is about to abandon and immediately reconnect.
+if (!simulMode && sourceLangSelect.value === targetLangSelect.value) {
+  targetLangSelect.value = sourceLangSelect.value === DEFAULT_LANGS.targetLang
+    ? DEFAULT_LANGS.sourceLang
+    : DEFAULT_LANGS.targetLang;
+}
+
 // Hide subtitle when it would overlap controls or when header wraps
 {
   const subtitle = document.querySelector(".subtitle");
@@ -92,12 +102,16 @@ function populateDropdown(hiddenInput, trigger, dropdown, selectedCode, language
     div.textContent = languages[code];
     div.dataset.value = code;
     div.addEventListener("click", () => {
+      const previous = hiddenInput.value;
       hiddenInput.value = code;
       rememberLang(hiddenInput, code);
       trigger.textContent = languages[code];
       dropdown.querySelectorAll(".custom-select-option").forEach(o => o.classList.remove("selected"));
       div.classList.add("selected");
       dropdown.classList.remove("open");
+      // Runs before the reconnect so the session opens on the corrected pair
+      // rather than on one the UI is about to move away from.
+      separateLanguages(hiddenInput, previous);
       reconnectWithNewLanguage();
     });
     dropdown.appendChild(div);
@@ -173,6 +187,50 @@ function rebuildTargetDropdown(preferred) {
   rememberLang(targetLangSelect, targetLangSelect.value);
 }
 
+/** Move one dropdown to *code*, repainting its list so the label agrees. */
+function setLangDropdown(hiddenInput, code) {
+  if (hiddenInput === targetLangSelect) {
+    rebuildTargetDropdown(code); // picks the right code set for the mode, and stores it
+    return;
+  }
+  populateDropdown(
+    sourceLangSelect, document.getElementById("sourceLangTrigger"),
+    document.getElementById("sourceLangDropdown"), code,
+    agentLangs, agentPopular, agentAllCodes
+  );
+  rememberLang(sourceLangSelect, sourceLangSelect.value);
+}
+
+/**
+ * Keep the two sides on different languages, moving the side that was not just
+ * touched. Returns whether anything had to change.
+ *
+ * Conversation interprets between the pair, so the same language on both sides
+ * leaves it nothing to do. Reaching that state takes nothing odd: translating
+ * *into* English is an ordinary Simul setup, and switching back to conversation
+ * drops that English opposite the English source. Persisting the pair made it
+ * stick across reloads instead of resetting, which is how a browser ends up
+ * coming back English ⇄ English every time.
+ *
+ * Simul is exempt — it is one-way, and its source dropdown is hidden precisely
+ * because the value is ignored.
+ */
+function separateLanguages(changedInput, previousCode) {
+  if (simulMode) return false;
+  if (sourceLangSelect.value !== targetLangSelect.value) return false;
+  const other = changedInput === sourceLangSelect ? targetLangSelect : sourceLangSelect;
+  // On a pick, the untouched side takes the value the touched one just gave up:
+  // that is a straight swap of a pair the user already had, so it needs no
+  // guessing. Elsewhere there is no such value and the first popular language
+  // that differs is as good a choice as any.
+  const replacement = previousCode && previousCode !== changedInput.value
+    ? previousCode
+    : agentPopular.find((c) => c !== changedInput.value && c in agentLangs);
+  if (!replacement) return false;
+  setLangDropdown(other, replacement);
+  return true;
+}
+
 // What the live session was actually opened with, as opposed to what the
 // dropdowns show — the two can drift apart while the language list loads.
 let connectedSource = null;
@@ -213,6 +271,12 @@ async function loadLanguages() {
   );
 
   if (simulMode) rebuildTargetDropdown(savedTarget);
+
+  // A stored pair can be equal — most often both English, since the fallback
+  // for an unknown code is the first popular language and that is English on
+  // both sides. Move the target off it before the comparison below, which then
+  // reopens the session on the pair actually being shown.
+  separateLanguages(sourceLangSelect, null);
 
   // A stored code the server no longer offers has just been replaced by a
   // fallback, and Simul remaps the target on top of that. Either way the
@@ -701,6 +765,9 @@ simulToggle.addEventListener("change", () => {
   // back to, so turning Simul off returns you to a conversation.
   convoMode = !simulMode;
   rebuildTargetDropdown();
+  // Turning Simul off brings a one-way target back opposite a source that was
+  // hidden while it was on, so this is where the two most often collide.
+  separateLanguages(sourceLangSelect, null);
   applySimulUi();
   reconnectWithNewLanguage();
 });
