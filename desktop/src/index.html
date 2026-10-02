@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'none'; img-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>Live Translator</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="renderer.js" defer></script>
+</head>
+<body>
+  <header><span class="mark">文<span>↔</span>A</span><div><h1>Live Translator</h1><p>Select text. Read it in your language.</p></div></header>
+  <main>
+    <section class="setup">
+      <div class="section-title"><h2>Browser captions</h2><span id="badge">Stopped</span></div>
+      <p class="intro">Translations appear at the bottom of the active Chrome tab. No extension or screen sharing needed.</p>
+      <div class="instructions"><b>Connect your Chrome</b><p>Open <code>chrome://inspect/#remote-debugging</code> in Chrome 144 or later and enable remote debugging. Click Start below, then allow the connection in Chrome.</p></div>
+      <form id="settingsForm">
+        <fieldset id="options">
+          <div class="language-row">
+            <label>Source language<select id="source" required><option value="en">English</option></select></label>
+            <span class="arrow">→</span>
+            <label>Translate to<select id="target" required><option value="ja">Japanese (日本語)</option></select></label>
+          </div>
+          <details><summary>Connection settings</summary>
+            <label>Translation server<input id="server" type="url" required spellcheck="false"></label>
+            <label>Chrome endpoint <span class="optional">(optional)</span><input id="endpoint" placeholder="Automatic · your running Chrome" spellcheck="false"></label>
+            <p class="hint">Leave blank for Chrome’s remote debugging setting. For a manually started browser, enter its local HTTP or WebSocket address.</p>
+            <button id="reloadLanguages" type="button" class="secondary">Reload languages</button>
+          </details>
+        </fieldset>
+        <div class="actions"><button id="start" type="submit">Start captions</button><button id="stop" type="button" class="secondary" disabled>Stop</button></div>
+      </form>
+      <p id="status" role="status" aria-live="polite">Loading settings…</p>
+    </section>
+    <section class="preview"><h2>Latest translation</h2><p id="original" class="original"></p><p id="translation">Your translated selection will appear here and on the page.</p></section>
+    <p class="footnote">While running, selected page text is sent to your translation server. Text in input fields and editors is excluded. Stop removes captions and disconnects from Chrome.</p>
+  </main>
+</body>
+</html>
