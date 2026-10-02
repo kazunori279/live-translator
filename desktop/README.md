@@ -69,7 +69,12 @@ Select a new passage to translate something else. Clearing the selection, switch
 
 If you were given a specific Chrome connection address, enter it under **Connection settings → Chrome endpoint**. Otherwise, leave that field blank.
 
-The default translation server is in Tokyo. If your app provider asks you to change it, use **Connection settings → Translation server**. The hosted addresses are listed in the [main README](../README.md#desktop-captions-for-selected-text).
+The default translation server is in Tokyo. If your app provider asks you to change it, use **Connection settings → Translation server**. 
+
+| Server | Address |
+| --- | --- |
+| Tokyo (default) | `https://live-translation-761793285222.asia-northeast1.run.app` |
+| US Central | `https://live-translation-761793285222.us-central1.run.app` |
 
 ## Privacy
 

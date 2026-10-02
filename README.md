@@ -2,7 +2,7 @@
 
 Real-time audio translation powered by Gemini Live API. Speak in any language and hear the translation immediately. The default is **conversation mode**: a bidirectional interpreter between the two selected languages (97 languages, glossary), so two people can talk to each other. Toggling **Simul** switches to simultaneous translation mode (78 languages, auto-detect source language, one-way into the target).
 
-For reading web pages, the [desktop app](#desktop-captions-for-selected-text) translates selected text with **Gemini 3.5 Flash-Lite** and displays captions directly on the active Chrome tab.
+[Desktop app — download and user guide](desktop/README.md)
 
 ![Demo](demo.gif)
 
@@ -41,62 +41,6 @@ uv run uvicorn app.main:app --reload
 Open http://localhost:8000.
 
 ## User Guide
-
-### Desktop captions for selected text
-
-The standalone Electron app connects to your running Chrome, sends selected
-text to the translation server, and places a caption at the bottom of the same
-tab. It follows the focused tab in the foreground Chrome window. No extension,
-microphone, screen sharing, or caption-overlay window is needed.
-
-[Download the Mac app (Apple Silicon)](https://github.com/kazunori279/live-translator/releases/download/desktop-v0.1.3/Live-Translator-mac-arm64.zip) and follow the [setup guide](desktop/README.md#first-time-setup). No source checkout is needed.
-
-**First launch on macOS:** Unzip the download, move **Live Translator.app** to **Applications**, and open it. The app is not Apple-notarized. If macOS blocks it and you trust this download, open **Apple menu → System Settings → Privacy & Security**, scroll to **Security**, click **Open Anyway** for Live Translator, and confirm **Open**. See the [step-by-step macOS instructions](desktop/README.md#opening-the-app-on-macos).
-
-**Requirements:** Chrome 144 or later and Node.js 22.12+ to run from source.
-The packaged app includes its runtime. When using the hosted server, you do not
-need Python, a local server, or a local Gemini API key.
-
-From the repository root:
-
-```bash
-cd desktop
-npm ci
-npm start
-```
-
-1. In Chrome, open `chrome://inspect/#remote-debugging` and enable **Allow remote debugging for this browser instance**. Leave Chrome running. A message such as `Server running at: 127.0.0.1:9222` means it is ready.
-2. In **Live Translator**, choose **Language 1** and **Language 2**. Leave **Chrome endpoint** under **Connection settings** blank for automatic discovery.
-3. Click **Start captions**. Chrome may show a **remote debugging connection** permission dialog; bring Chrome to the front if it is hidden. Click **Allow** for the connection you just started with Live Translator, then wait for **Running** in the app. This dialog is separate from enabling remote debugging in Chrome’s settings. If you deny or dismiss it, click **Stop**, then **Start captions** to retry. Only approve requests you recognize, since remote debugging grants broad browser access.
-4. Switch to a web page and select text. After the selection settles for 600 ms, the translated caption appears on that page and in the app's **Latest translation** panel.
-5. Select another passage to translate it. Clearing the selection, switching tabs, or navigating removes the old caption and cancels its pending result. Click **Stop**, or quit the app, to disconnect and remove captions without closing Chrome.
-
-Translation works both ways: with English and Japanese selected, English text becomes Japanese and Japanese text becomes English. Other languages translate into **Language 2**. The ten popular languages appear first in each menu, followed by all other languages.
-
-**Connection settings** also lets you select a translation server:
-
-| Server | URL |
-| --- | --- |
-| Tokyo (default) | `https://live-translation-761793285222.asia-northeast1.run.app` |
-| US Central | `https://live-translation-761793285222.us-central1.run.app` |
-| Local development | `http://localhost:8000` |
-
-The desktop client uses `POST /api/translate` with **`gemini-3.5-flash-lite`**.
-It makes text-only requests over reusable HTTP connections, with no Live
-session initialization or audio generation. The server's
-`TEXT_TRANSLATION_MODEL` environment variable controls this model; the web
-app's audio translation models are configured separately.
-
-Selections are limited to 10,000 characters. Input fields and editable areas
-are excluded. Regular HTTP/HTTPS pages and accessible iframes are supported;
-Chrome internal pages, its PDF viewer, and canvas-only text are not. Only the
-selected text is sent for translation, and only connection and language
-preferences are saved locally.
-
-To build a standalone app, run `npm run package` from `desktop/`. On an Apple
-Silicon Mac, open `desktop/dist/Live Translator-darwin-arm64/Live Translator.app`.
-Build outputs are not checked into Git. See the [desktop README](desktop/README.md)
-for first-time setup, everyday use, and troubleshooting.
 
 ### Basic Usage
 
