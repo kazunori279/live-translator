@@ -12,9 +12,9 @@ You do not need a browser extension, microphone, API key, or developer tools ins
 
 ## First-time setup
 
-1. [Download Live Translator for Mac (Apple Silicon)](https://github.com/kazunori279/live-translator/releases/download/desktop-v0.1.0/Live-Translator-mac-arm64.zip). This build supports Macs with an M-series chip; it does not support Intel Macs or Windows.
+1. [Download Live Translator for Mac (Apple Silicon)](https://github.com/kazunori279/live-translator/releases/download/desktop-v0.1.1/Live-Translator-mac-arm64.zip). This build supports Macs with an M-series chip; it does not support Intel Macs or Windows.
 2. Open the downloaded ZIP, then drag **Live Translator.app** to your **Applications** folder and open it.
-3. In Chrome, paste `chrome://inspect/#remote-debugging` into the address bar.
+3. Click the `chrome://inspect/#remote-debugging` link in Live Translator to open Chrome’s setup page. You can also paste that address into Chrome’s address bar.
 4. Enable **Allow remote debugging for this browser instance**. Keep Chrome open. A message such as `Server running at: 127.0.0.1:9222` means it is ready.
 5. Return to Live Translator and choose **Language 1** and **Language 2**.
 6. Click **Start captions**. If Chrome asks to allow the connection, approve it for Live Translator. Wait for the app to show **Running**.

@@ -3,6 +3,8 @@ import { connectChrome } from './chrome.js';
 import { readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { DEFAULT_SERVER, loadLanguages, serverURL } from './translation.js';
 import { SelectionWatcher } from './watcher.js';
 
@@ -60,6 +62,16 @@ try {
 } catch { /* First run, or obsolete settings. */ }
 session.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
 handle('settings', () => settings);
+handle('openChromeSettings', async () => {
+  if (process.platform !== 'darwin') {
+    throw new Error('Open chrome://inspect/#remote-debugging in Chrome.');
+  }
+  try {
+    await promisify(execFile)('/usr/bin/open', ['-a', 'Google Chrome', 'chrome://inspect/#remote-debugging']);
+  } catch {
+    throw new Error('Could not open Chrome. Open chrome://inspect/#remote-debugging in Chrome manually.');
+  }
+});
 handle('languages', server => loadLanguages(server));
 handle('start', async value => {
   if (starting) throw new Error('A connection is already in progress.');

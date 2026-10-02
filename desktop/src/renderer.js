@@ -53,6 +53,11 @@ window.translator.onStatus(data => {
   if (data.translation !== undefined) get('translation').textContent = data.translation || 'Waiting for a translation…';
   controls();
 });
+get('openChromeSettings').addEventListener('click', async event => {
+  event.preventDefault();
+  try { await window.translator.openChromeSettings(); }
+  catch (error) { get('status').textContent = error.message; }
+});
 get('settingsForm').addEventListener('submit', async event => {
   event.preventDefault();
   connecting = true;
