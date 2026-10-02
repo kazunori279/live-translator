@@ -69,7 +69,7 @@ Select a new passage to translate something else. Clearing the selection, switch
 
 If you were given a specific Chrome connection address, enter it under **Connection settings → Chrome endpoint**. Otherwise, leave that field blank.
 
-The default translation server is in Tokyo. If your app provider asks you to change it, use **Connection settings → Translation server**. 
+The default translation server is in Tokyo. If your app provider asks you to change it, use **Connection settings → Translation server**.
 
 | Server | Address |
 | --- | --- |
