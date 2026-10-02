@@ -12,14 +12,22 @@ You do not need a browser extension, microphone, API key, or developer tools ins
 
 ## First-time setup
 
-1. [Download Live Translator for Mac (Apple Silicon)](https://github.com/kazunori279/live-translator/releases/download/desktop-v0.1.1/Live-Translator-mac-arm64.zip). This build supports Macs with an M-series chip; it does not support Intel Macs or Windows.
+1. [Download Live Translator for Mac (Apple Silicon)](https://github.com/kazunori279/live-translator/releases/download/desktop-v0.1.2/Live-Translator-mac-arm64.zip). This build supports Macs with an M-series chip; it does not support Intel Macs or Windows.
 2. Open the downloaded ZIP, then drag **Live Translator.app** to your **Applications** folder and open it.
 3. Click the `chrome://inspect/#remote-debugging` link in Live Translator to open Chrome’s setup page. You can also paste that address into Chrome’s address bar.
 4. Enable **Allow remote debugging for this browser instance**. Keep Chrome open. A message such as `Server running at: 127.0.0.1:9222` means it is ready.
 5. Return to Live Translator and choose **Language 1** and **Language 2**.
 6. Click **Start captions**. If Chrome asks to allow the connection, approve it for Live Translator. Wait for the app to show **Running**.
 
-Leave **Connection settings** at their defaults for normal use. The current Mac build is unsigned and has not been notarized by Apple. If macOS prevents it from opening, contact the person who supplied it for installation help.
+Leave **Connection settings** at their defaults for normal use.
+
+### Opening the app on macOS
+
+This app is **not Apple-notarized or Developer ID signed**. Version 0.1.2 has an ad-hoc signature that checks the app’s integrity, but does not identify a developer trusted by Apple. macOS may block the first launch.
+
+If you trust this app and downloaded it from the GitHub release linked above, try opening it, then go to **System Settings → Privacy & Security**. If **Open Anyway** appears for Live Translator, use it and confirm **Open**. This allows this app specifically; do not disable Gatekeeper system-wide. See [Apple’s instructions for opening apps safely](https://support.apple.com/102445).
+
+Versions 0.1.0 and 0.1.1 had an invalid bundle signature and could display “damaged” or “move to Trash.” Replace those versions with the current download. If the new version still reports damage or does not offer **Open Anyway**, stop and report the macOS version and exact message; do not override a malware warning.
 
 ## Translate a web page
 

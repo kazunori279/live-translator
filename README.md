@@ -49,7 +49,7 @@ text to the translation server, and places a caption at the bottom of the same
 tab. It follows the focused tab in the foreground Chrome window. No extension,
 microphone, screen sharing, or caption-overlay window is needed.
 
-[Download the Mac app (Apple Silicon)](https://github.com/kazunori279/live-translator/releases/download/desktop-v0.1.1/Live-Translator-mac-arm64.zip) and follow the [setup guide](desktop/README.md#first-time-setup). No source checkout is needed.
+[Download the Mac app (Apple Silicon)](https://github.com/kazunori279/live-translator/releases/download/desktop-v0.1.2/Live-Translator-mac-arm64.zip) and follow the [setup guide](desktop/README.md#first-time-setup). No source checkout is needed.
 
 **Requirements:** Chrome 144 or later and Node.js 22.12+ to run from source.
 The packaged app includes its runtime. When using the hosted server, you do not

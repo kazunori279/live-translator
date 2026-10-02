@@ -1,6 +1,6 @@
 {
   "name": "live-translator-desktop",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Translate selected Chrome text into captions on the same tab",
   "license": "Apache-2.0",
   "private": true,
@@ -9,7 +9,7 @@
   "scripts": {
     "start": "electron .",
     "test": "node --test test/*.test.js",
-    "package": "electron-packager . 'Live Translator' --out=dist --overwrite --ignore='^/(test|dist)($|/)'"
+    "package": "node scripts/package.mjs"
   },
   "dependencies": {
     "puppeteer-core": "25.12.0",
