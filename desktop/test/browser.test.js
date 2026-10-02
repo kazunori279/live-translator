@@ -73,10 +73,15 @@ test('real Chrome: selection, iframe, safe caption, cancellation, tab changes, c
   await until(async () => await page.evaluate(id => document.getElementById(id)?.shadowRoot.textContent.includes('新しい字幕'), watcher.captionId), 'caption missing');
   assert.equal(await page.evaluate(id => document.getElementById(id)?.shadowRoot.textContent.includes('STALE CAPTION'), watcher.captionId), false);
 
+  // Other debugging clients can make every renderer report focus/visibility.
+  // The watcher must use the actual Chrome tab strip instead of the first page.
+  await page.emulateFocusedPage(true);
   const second = await browser.newPage();
+  await second.emulateFocusedPage(true);
   await second.goto(url);
   await second.bringToFront();
   await select(second);
+  assert.equal((await page.mainFrame().isolatedRealm().evaluate(readSelection, 'testState')).focused, true);
   await until(async () => !await page.$(`#${watcher.captionId}`), 'caption stayed on inactive tab');
   await until(() => jobs.length === 3, 'active tab did not follow');
   jobs[2].resolve('別のタブ');
@@ -103,7 +108,21 @@ test('real Chrome: selection, iframe, safe caption, cancellation, tab changes, c
   jobs[3].resolve('STALE FRAME');
   await wait(350);
   assert.equal(await second.$(`#${watcher.captionId}`), null);
+  await page.bringToFront();
+  await select(page);
+  await until(() => jobs.length === 5, 'returning to an existing tab was not detected');
+  jobs[4].resolve('戻ったタブ');
+  await until(async () => await page.evaluate(id => document.getElementById(id)?.shadowRoot.textContent.includes('戻ったタブ'), watcher.captionId), 'caption missing after returning');
+  const third = await browser.newPage();
+  await third.goto(url);
+  await third.bringToFront();
+  await third.emulateFocusedPage(true);
+  await select(third);
+  await until(() => jobs.length === 6, 'newly opened tab was not detected');
+  jobs[5].resolve('新しいタブ');
+  await until(async () => await third.evaluate(id => document.getElementById(id)?.shadowRoot.textContent.includes('新しいタブ'), watcher.captionId), 'caption missing on newly opened tab');
   await watcher.stop();
+  assert.equal(await third.$(`#${watcher.captionId}`), null);
   assert.equal(await second.$(`#${watcher.captionId}`), null);
   assert.equal(browser.connected, true);
 });

@@ -5,14 +5,14 @@ Select text on a web page and see its translation as a caption on the same page.
 ## What you need
 
 - An Apple Silicon Mac with the **Live Translator** app.
-- Google Chrome with the remote debugging option available.
+- Google Chrome with the remote debugging option available. Chrome 150 or later is recommended for reliable tab switching when other browser automation tools are connected.
 - An internet connection.
 
 You do not need a browser extension, microphone, API key, or developer tools installed. There is no need to download the source code.
 
 ## First-time setup
 
-1. [Download Live Translator for Mac (Apple Silicon)](https://github.com/kazunori279/live-translator/releases/download/desktop-v0.1.2/Live-Translator-mac-arm64.zip). This build supports Macs with an M-series chip; it does not support Intel Macs or Windows.
+1. [Download Live Translator for Mac (Apple Silicon)](https://github.com/kazunori279/live-translator/releases/download/desktop-v0.1.3/Live-Translator-mac-arm64.zip). This build supports Macs with an M-series chip; it does not support Intel Macs or Windows.
 2. Open the downloaded ZIP, then drag **Live Translator.app** to your **Applications** folder and open it.
 3. If macOS blocks the app, follow [Opening the app on macOS](#opening-the-app-on-macos) below: **System Settings → Privacy & Security → Open Anyway**.
 4. Click the `chrome://inspect/#remote-debugging` link in Live Translator to open Chrome’s setup page. You can also paste that address into Chrome’s address bar.
@@ -26,7 +26,7 @@ Leave **Connection settings** at their defaults for normal use.
 
 ### Opening the app on macOS
 
-This app is **not Apple-notarized or Developer ID signed**. Version 0.1.2 has an ad-hoc signature that checks the app’s integrity, but does not identify a developer trusted by Apple. macOS may block the first launch.
+This app is **not Apple-notarized or Developer ID signed**. Version 0.1.2 and later have an ad-hoc signature that checks the app’s integrity, but does not identify a developer trusted by Apple. macOS may block the first launch.
 
 If you trust this app and downloaded it from the GitHub release linked above:
 

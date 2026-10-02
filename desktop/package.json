@@ -1,6 +1,6 @@
 {
   "name": "live-translator-desktop",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Translate selected Chrome text into captions on the same tab",
   "license": "Apache-2.0",
   "private": true,

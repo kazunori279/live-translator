@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { readSelection, showCaption, cleanPage } from './page.js';
+import { ActiveTabs } from './active-tabs.js';
 import { translate } from './translation.js';
 
 export function sameSelection(a, b) {
@@ -10,6 +11,7 @@ export function sameSelection(a, b) {
 export class SelectionWatcher {
   constructor(browser, options, report, translator = translate) {
     this.browser = browser;
+    this.activeTabs = new ActiveTabs(browser);
     this.options = options;
     this.report = report;
     this.translator = translator;
@@ -38,9 +40,11 @@ export class SelectionWatcher {
   }
 
   async focusedSelection() {
+    const activeIds = await this.activeTabs.activePageIds();
     const pages = await this.browser.pages();
     for (const page of pages) {
       if (!/^https?:\/\//.test(page.url())) continue;
+      if (!await this.activeTabs.includes(page, activeIds)) continue;
       let top;
       try { top = await page.mainFrame().isolatedRealm().evaluate(readSelection, this.stateKey); }
       catch { continue; }
@@ -108,6 +112,8 @@ export class SelectionWatcher {
   async isCurrent(snapshot, generation) {
     if (!this.running || generation !== this.generation) return false;
     try {
+      const activeIds = await this.activeTabs.activePageIds();
+      if (!await this.activeTabs.includes(snapshot.page, activeIds)) return false;
       const now = await snapshot.frame.isolatedRealm().evaluate(readSelection, this.stateKey);
       return this.running && generation === this.generation && now.focused &&
         sameSelection(snapshot, { ...now, page: snapshot.page, frame: snapshot.frame });
@@ -127,6 +133,7 @@ export class SelectionWatcher {
     this.wake?.();
     await Promise.allSettled([...this.touched].flatMap(page => page.frames().map(frame =>
       frame.isolatedRealm().evaluate(cleanPage, this.captionId, this.stateKey))));
+    await this.activeTabs.stop();
     this.touched.clear();
     this.current = null;
   }
