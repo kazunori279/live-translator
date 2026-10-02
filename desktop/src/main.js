@@ -21,6 +21,7 @@ function validateSettings(value) {
   if (!/^[a-zA-Z0-9-]{2,20}$/.test(value.source) || !/^[a-zA-Z0-9-]{2,20}$/.test(value.target)) {
     throw new Error('Choose source and target languages.');
   }
+  if (value.source === value.target) throw new Error('Choose two different languages.');
   const endpoint = String(value.endpoint || '').trim();
   if (endpoint) {
     const url = new URL(endpoint);
@@ -68,7 +69,7 @@ handle('start', async value => {
     const next = validateSettings(value);
     connectionAbort = new AbortController();
     const connectionSignal = connectionAbort.signal;
-    const languages = await loadLanguages(next.server);
+    const { languages } = await loadLanguages(next.server);
     if (connectionSignal.aborted) throw new DOMException('Connection cancelled', 'AbortError');
     if (!languages[next.source] || !languages[next.target]) throw new Error('Language is not supported by this server.');
     report({ message: 'Connecting to Chrome… Approve the connection in Chrome if prompted.' });

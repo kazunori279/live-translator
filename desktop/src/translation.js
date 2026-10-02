@@ -16,13 +16,13 @@ export async function loadLanguages(server) {
     signal: AbortSignal.timeout(10000),
   });
   if (!response.ok) throw new Error(`Cannot load languages (HTTP ${response.status}).`);
-  const { languages } = await response.json();
+  const { languages, popular = [] } = await response.json();
   if (!languages || typeof languages !== 'object') throw new Error('Invalid language list.');
-  return languages;
+  return { languages, popular };
 }
 
 /** Text-only requests reuse HTTP connections; no Live session or audio is created. */
-export async function translate({ server, source, target, text, signal, timeoutMs = 35000 }) {
+export async function translate({ server, source, target, text, signal, bidirectional = true, timeoutMs = 35000 }) {
   if (typeof text !== 'string' || !text.trim() || text.length > 10000) {
     throw new Error('Select between 1 and 10,000 characters.');
   }
@@ -35,7 +35,7 @@ export async function translate({ server, source, target, text, signal, timeoutM
     response = await fetch(new URL('api/translate', serverURL(server)), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ source, target, text: text.trim() }),
+      body: JSON.stringify({ source, target, bidirectional, text: text.trim() }),
       signal: requestSignal,
     });
     data = await response.json();

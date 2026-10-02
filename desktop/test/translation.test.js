@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { translate, serverURL } from '../src/translation.js';
+import { translate, serverURL, loadLanguages } from '../src/translation.js';
 
 async function mockServer(t, handler) {
   const server = createServer(async (req, res) => {
@@ -25,7 +25,7 @@ test('uses one text-only POST and returns the translated caption', async t => {
     requests++;
     assert.equal(req.method, 'POST');
     assert.equal(req.url, '/api/translate');
-    assert.deepEqual(body, options);
+    assert.deepEqual(body, { ...options, bidirectional: true });
     res.end(JSON.stringify({ text: 'こんにちは。', model: 'test-text-model' }));
   });
   assert.equal(await translate({ ...options, server }), 'こんにちは。');
@@ -64,4 +64,13 @@ test('rejects empty/oversized text and insecure remote servers', async () => {
   assert.equal(serverURL('https://example.com/').href, 'https://example.com/');
   await assert.rejects(translate({ ...options, text: ' ', server: 'https://example.com' }), /Select between/);
   await assert.rejects(translate({ ...options, text: 'x'.repeat(10001), server: 'https://example.com' }), /Select between/);
+});
+
+test('language metadata preserves popular ordering', async t => {
+  const catalog = { languages: { en: 'English', ja: 'Japanese' }, popular: ['ja', 'en'] };
+  const server = await mockServer(t, (req, res) => {
+    assert.equal(req.url, '/api/languages');
+    res.end(JSON.stringify(catalog));
+  });
+  assert.deepEqual(await loadLanguages(server), catalog);
 });

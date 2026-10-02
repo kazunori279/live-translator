@@ -49,6 +49,8 @@ text to the translation server, and places a caption at the bottom of the same
 tab. It follows the focused tab in the foreground Chrome window. No extension,
 microphone, screen sharing, or caption-overlay window is needed.
 
+[Download the Mac app (Apple Silicon)](https://github.com/kazunori279/live-translator/releases/download/desktop-v0.1.0/Live-Translator-mac-arm64.zip) and follow the [setup guide](desktop/README.md#first-time-setup). No source checkout is needed.
+
 **Requirements:** Chrome 144 or later and Node.js 22.12+ to run from source.
 The packaged app includes its runtime. When using the hosted server, you do not
 need Python, a local server, or a local Gemini API key.
@@ -62,10 +64,12 @@ npm start
 ```
 
 1. In Chrome, open `chrome://inspect/#remote-debugging` and enable **Allow remote debugging for this browser instance**. Leave Chrome running. A message such as `Server running at: 127.0.0.1:9222` means it is ready.
-2. In **Live Translator**, choose **Source language** and **Translate to**. Leave **Chrome endpoint** under **Connection settings** blank for automatic discovery.
+2. In **Live Translator**, choose **Language 1** and **Language 2**. Leave **Chrome endpoint** under **Connection settings** blank for automatic discovery.
 3. Click **Start captions** and allow the debugging connection in Chrome if prompted. Wait for **Running**.
 4. Switch to a web page and select text. After the selection settles for 600 ms, the translated caption appears on that page and in the app's **Latest translation** panel.
 5. Select another passage to translate it. Clearing the selection, switching tabs, or navigating removes the old caption and cancels its pending result. Click **Stop**, or quit the app, to disconnect and remove captions without closing Chrome.
+
+Translation works both ways: with English and Japanese selected, English text becomes Japanese and Japanese text becomes English. Other languages translate into **Language 2**. The ten popular languages appear first in each menu, followed by all other languages.
 
 **Connection settings** also lets you select a translation server:
 
@@ -90,7 +94,7 @@ preferences are saved locally.
 To build a standalone app, run `npm run package` from `desktop/`. On an Apple
 Silicon Mac, open `desktop/dist/Live Translator-darwin-arm64/Live Translator.app`.
 Build outputs are not checked into Git. See the [desktop README](desktop/README.md)
-for build details, alternate Chrome connections, troubleshooting, and tests.
+for first-time setup, everyday use, and troubleshooting.
 
 ### Basic Usage
 

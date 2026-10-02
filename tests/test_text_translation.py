@@ -38,6 +38,21 @@ class TextTranslationTest(unittest.TestCase):
         self.assertEqual(args["config"].response_modalities, ["TEXT"])
         self.assertEqual(args["config"].thinking_config.thinking_level, "LOW")
 
+    def test_bidirectional_routing_and_distinct_languages(self):
+        response = self.http.post("/api/translate", json={
+            "text": "こんにちは", "source": "en", "target": "ja", "bidirectional": True,
+        })
+        self.assertEqual(response.status_code, 200)
+        instruction = self.generator.call_args.kwargs["config"].system_instruction
+        self.assertIn("If it is Japanese (日本語), translate into English", instruction)
+        self.assertIn("third language, translate into Japanese", instruction)
+        self.generator.reset_mock()
+        response = self.http.post("/api/translate", json={
+            "text": "Hello", "source": "en", "target": "en", "bidirectional": True,
+        })
+        self.assertEqual(response.status_code, 422)
+        self.generator.assert_not_awaited()
+
     def test_invalid_input_does_not_call_model(self):
         for body in [{"text": ""}, {"text": " "}, {"text": 42}, {"text": "x" * 10001},
                      {"text": "hi", "target": "invalid"}, {"text": "hi", "source": "invalid"}]:

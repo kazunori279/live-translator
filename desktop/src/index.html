@@ -6,7 +6,7 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'none'; img-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
   <title>Live Translator</title>
   <link rel="stylesheet" href="style.css">
-  <script src="renderer.js" defer></script>
+  <script src="renderer.js" type="module"></script>
 </head>
 <body>
   <header><span class="mark">文<span>↔</span>A</span><div><h1>Live Translator</h1><p>Select text. Read it in your language.</p></div></header>
@@ -18,10 +18,11 @@
       <form id="settingsForm">
         <fieldset id="options">
           <div class="language-row">
-            <label>Source language<select id="source" required><option value="en">English</option></select></label>
-            <span class="arrow">→</span>
-            <label>Translate to<select id="target" required><option value="ja">Japanese (日本語)</option></select></label>
+            <label>Language 1<select id="source" required><option value="en">English</option></select></label>
+            <span class="arrow" aria-label="Two-way translation">⇄</span>
+            <label>Language 2<select id="target" required><option value="ja">Japanese (日本語)</option></select></label>
           </div>
+          <p class="hint">Automatically translates between these two languages. Other languages translate to Language 2.</p>
           <details><summary>Connection settings</summary>
             <label>Translation server<input id="server" type="url" required spellcheck="false"></label>
             <label>Chrome endpoint <span class="optional">(optional)</span><input id="endpoint" placeholder="Automatic · your running Chrome" spellcheck="false"></label>

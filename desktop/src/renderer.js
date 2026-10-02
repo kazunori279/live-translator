@@ -1,4 +1,8 @@
+import { languageGroups, languagePair } from './languages.js';
+
 const get = id => document.getElementById(id);
+let languageCatalog = {};
+let previousPair = { source: 'en', target: 'ja' };
 let running = false;
 let busy = false;
 let connecting = false;
@@ -13,16 +17,34 @@ function values() {
   return Object.fromEntries(['server', 'source', 'target', 'endpoint'].map(key => [key, get(key).value]));
 }
 async function languages(source = get('source').value, target = get('target').value) {
-  const entries = Object.entries(await window.translator.languages(get('server').value));
-  for (const [id, selected] of [['source', source], ['target', target]]) {
-    get(id).replaceChildren(...entries.map(([code, name]) => {
-      const option = document.createElement('option');
-      option.value = code;
-      option.textContent = name;
-      return option;
+  const catalog = await window.translator.languages(get('server').value);
+  languageCatalog = catalog.languages;
+  const groups = languageGroups(languageCatalog, catalog.popular);
+  const pair = languagePair(languageCatalog, source, target);
+  for (const id of ['source', 'target']) {
+    get(id).replaceChildren(...groups.map(({ label, codes }) => {
+      const group = document.createElement('optgroup');
+      group.label = label;
+      group.append(...codes.map(code => {
+        const option = document.createElement('option');
+        option.value = code;
+        option.textContent = languageCatalog[code];
+        return option;
+      }));
+      return group;
     }));
-    get(id).value = selected;
+    get(id).value = pair[id];
   }
+  previousPair = pair;
+}
+for (const id of ['source', 'target']) {
+  get(id).addEventListener('change', () => {
+    if (get('source').value === get('target').value) {
+      const other = id === 'source' ? 'target' : 'source';
+      get(other).value = previousPair[id];
+    }
+    previousPair = { source: get('source').value, target: get('target').value };
+  });
 }
 window.translator.onStatus(data => {
   if (data.running !== undefined) running = data.running;
