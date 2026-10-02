@@ -18,7 +18,9 @@ You do not need a browser extension, microphone, API key, or developer tools ins
 4. Click the `chrome://inspect/#remote-debugging` link in Live Translator to open Chrome’s setup page. You can also paste that address into Chrome’s address bar.
 5. Enable **Allow remote debugging for this browser instance**. Keep Chrome open. A message such as `Server running at: 127.0.0.1:9222` means it is ready.
 6. Return to Live Translator and choose **Language 1** and **Language 2**.
-7. Click **Start captions**. If Chrome asks to allow the connection, approve it for Live Translator. Wait for the app to show **Running**.
+7. Click **Start captions**. Chrome may display a dialog asking whether to allow a remote debugging connection. Bring Chrome to the front if the dialog is hidden behind Live Translator.
+8. If you just started Live Translator, click **Allow** in Chrome’s dialog. This lets Live Translator read your selected text and display captions on the page. Remote debugging grants broad control of the browser, so only approve connection requests you recognize. This approval is separate from enabling remote debugging in Chrome’s settings.
+9. Return to Live Translator and wait for **Running**. If you cancel or deny the dialog, click **Stop**, then **Start captions** to try again.
 
 Leave **Connection settings** at their defaults for normal use.
 
@@ -59,7 +61,7 @@ Select a new passage to translate something else. Clearing the selection, switch
 | Problem | Try this |
 | --- | --- |
 | The app cannot find Chrome | Keep Chrome open and check that remote debugging is enabled on the page used during setup. Leave **Chrome endpoint** blank under **Connection settings**. |
-| The app stays on Connecting | Look in Chrome for a connection approval dialog. You can also click **Stop**, then **Start captions** to retry. |
+| The app stays on Connecting | Bring Chrome to the front and look for its remote debugging permission dialog. Click **Allow** for the connection you just started with Live Translator. If you dismissed or denied it, click **Stop**, then **Start captions** to retry. |
 | Chrome disconnected | Reopen Chrome if needed, then click **Start captions** again. |
 | No caption appears | Bring the page to the front and select ordinary page text. Text inside images, PDFs, text boxes, and editors is not supported. Chrome settings pages are also excluded. |
 | Translation fails or times out | Check your internet connection. Clear the selection and select it again. Try a shorter passage; the limit is 10,000 characters. |

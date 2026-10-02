@@ -67,7 +67,7 @@ npm start
 
 1. In Chrome, open `chrome://inspect/#remote-debugging` and enable **Allow remote debugging for this browser instance**. Leave Chrome running. A message such as `Server running at: 127.0.0.1:9222` means it is ready.
 2. In **Live Translator**, choose **Language 1** and **Language 2**. Leave **Chrome endpoint** under **Connection settings** blank for automatic discovery.
-3. Click **Start captions** and allow the debugging connection in Chrome if prompted. Wait for **Running**.
+3. Click **Start captions**. Chrome may show a **remote debugging connection** permission dialog; bring Chrome to the front if it is hidden. Click **Allow** for the connection you just started with Live Translator, then wait for **Running** in the app. This dialog is separate from enabling remote debugging in Chrome’s settings. If you deny or dismiss it, click **Stop**, then **Start captions** to retry. Only approve requests you recognize, since remote debugging grants broad browser access.
 4. Switch to a web page and select text. After the selection settles for 600 ms, the translated caption appears on that page and in the app's **Latest translation** panel.
 5. Select another passage to translate it. Clearing the selection, switching tabs, or navigating removes the old caption and cancels its pending result. Click **Stop**, or quit the app, to disconnect and remove captions without closing Chrome.
 
