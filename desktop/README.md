@@ -14,10 +14,11 @@ You do not need a browser extension, microphone, API key, or developer tools ins
 
 1. [Download Live Translator for Mac (Apple Silicon)](https://github.com/kazunori279/live-translator/releases/download/desktop-v0.1.2/Live-Translator-mac-arm64.zip). This build supports Macs with an M-series chip; it does not support Intel Macs or Windows.
 2. Open the downloaded ZIP, then drag **Live Translator.app** to your **Applications** folder and open it.
-3. Click the `chrome://inspect/#remote-debugging` link in Live Translator to open Chrome’s setup page. You can also paste that address into Chrome’s address bar.
-4. Enable **Allow remote debugging for this browser instance**. Keep Chrome open. A message such as `Server running at: 127.0.0.1:9222` means it is ready.
-5. Return to Live Translator and choose **Language 1** and **Language 2**.
-6. Click **Start captions**. If Chrome asks to allow the connection, approve it for Live Translator. Wait for the app to show **Running**.
+3. If macOS blocks the app, follow [Opening the app on macOS](#opening-the-app-on-macos) below: **System Settings → Privacy & Security → Open Anyway**.
+4. Click the `chrome://inspect/#remote-debugging` link in Live Translator to open Chrome’s setup page. You can also paste that address into Chrome’s address bar.
+5. Enable **Allow remote debugging for this browser instance**. Keep Chrome open. A message such as `Server running at: 127.0.0.1:9222` means it is ready.
+6. Return to Live Translator and choose **Language 1** and **Language 2**.
+7. Click **Start captions**. If Chrome asks to allow the connection, approve it for Live Translator. Wait for the app to show **Running**.
 
 Leave **Connection settings** at their defaults for normal use.
 
@@ -25,7 +26,15 @@ Leave **Connection settings** at their defaults for normal use.
 
 This app is **not Apple-notarized or Developer ID signed**. Version 0.1.2 has an ad-hoc signature that checks the app’s integrity, but does not identify a developer trusted by Apple. macOS may block the first launch.
 
-If you trust this app and downloaded it from the GitHub release linked above, try opening it, then go to **System Settings → Privacy & Security**. If **Open Anyway** appears for Live Translator, use it and confirm **Open**. This allows this app specifically; do not disable Gatekeeper system-wide. See [Apple’s instructions for opening apps safely](https://support.apple.com/102445).
+If you trust this app and downloaded it from the GitHub release linked above:
+
+1. Open **Live Translator.app** from **Applications** once. If macOS blocks it, dismiss the message.
+2. Open the **Apple menu → System Settings → Privacy & Security**.
+3. Scroll to the **Security** section and find the message about Live Translator being blocked.
+4. Click **Open Anyway**. Authenticate with Touch ID or your Mac password if prompted.
+5. Confirm **Open** in the next dialog. Live Translator should launch.
+
+This allows this app specifically; do not disable Gatekeeper system-wide. See [Apple’s instructions for opening apps safely](https://support.apple.com/102445).
 
 Versions 0.1.0 and 0.1.1 had an invalid bundle signature and could display “damaged” or “move to Trash.” Replace those versions with the current download. If the new version still reports damage or does not offer **Open Anyway**, stop and report the macOS version and exact message; do not override a malware warning.
 

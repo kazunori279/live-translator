@@ -51,6 +51,8 @@ microphone, screen sharing, or caption-overlay window is needed.
 
 [Download the Mac app (Apple Silicon)](https://github.com/kazunori279/live-translator/releases/download/desktop-v0.1.2/Live-Translator-mac-arm64.zip) and follow the [setup guide](desktop/README.md#first-time-setup). No source checkout is needed.
 
+**First launch on macOS:** Unzip the download, move **Live Translator.app** to **Applications**, and open it. The app is not Apple-notarized. If macOS blocks it and you trust this download, open **Apple menu → System Settings → Privacy & Security**, scroll to **Security**, click **Open Anyway** for Live Translator, and confirm **Open**. See the [step-by-step macOS instructions](desktop/README.md#opening-the-app-on-macos).
+
 **Requirements:** Chrome 144 or later and Node.js 22.12+ to run from source.
 The packaged app includes its runtime. When using the hosted server, you do not
 need Python, a local server, or a local Gemini API key.
