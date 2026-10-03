@@ -7,3 +7,5 @@ soak_*.jsonl
 soak_*.report
 desktop/node_modules/
 desktop/dist/
+extension/node_modules/
+extension/dist/

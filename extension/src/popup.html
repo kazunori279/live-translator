@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Live Translator</title>
+  <link rel="stylesheet" href="popup.css">
+  <script src="popup.js" type="module"></script>
+</head>
+<body>
+  <header><span class="mark">文<span>↔</span>A</span><div><h1>Live Translator</h1><p>Select text. Read it in your language.</p></div></header>
+  <main>
+    <section>
+      <div class="section-title"><h2>Browser captions</h2><span id="badge">Stopped</span></div>
+      <p class="intro">Select text on a web page to see its translation on that page. Captions follow your active tab.</p>
+      <form id="settingsForm">
+        <fieldset id="options">
+          <div class="language-row">
+            <label>Language 1<select id="source" required></select></label>
+            <span class="arrow" aria-label="Two-way translation">⇄</span>
+            <label>Language 2<select id="target" required></select></label>
+          </div>
+          <p class="hint">Translates both ways. Other languages translate to Language 2.</p>
+          <details><summary>Connection settings</summary>
+            <label>Translation server<input id="server" type="url" required spellcheck="false"></label>
+            <button id="reload" type="button" class="secondary">Reload languages</button>
+          </details>
+        </fieldset>
+        <div class="actions"><button id="start" type="submit">Start captions</button><button id="stop" type="button" class="secondary" disabled>Stop</button></div>
+      </form>
+      <p id="status" role="status" aria-live="polite">Loading settings…</p>
+    </section>
+    <section class="preview"><h2>Latest translation</h2><p id="original" class="original"></p><p id="translation">Your translated selection will appear here and on the page.</p></section>
+    <p class="footnote">Start requests website access so captions can follow you across tabs. While running, selected page text is sent to your translation server and Gemini. Text boxes and editors are excluded. Close this popup to keep translating; click Stop to finish.</p>
+  </main>
+</body>
+</html>

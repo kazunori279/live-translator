@@ -4,6 +4,8 @@ Real-time audio translation powered by Gemini Live API. Speak in any language an
 
 [Desktop app — download and user guide](desktop/README.md)
 
+[Chrome extension for selected-text captions — download and user guide](extension/README.md)
+
 ![Demo](demo.gif)
 
 A browser tab's audio — a video, a webinar, the remote side of a call — is something a web page cannot reach, so that case grew a Chrome extension of its own: **[Interpretab](https://github.com/kazunori279/interpretab)**, now a separate repo that talks to the Gemini Live API directly ([why](#chrome-extension--interpretab)).
