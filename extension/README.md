@@ -1,4 +1,4 @@
-# Live Translator for Chrome
+# Text Live Translator for Chrome
 
 Select text on a web page and see a translation as a caption on that page. Choose two languages and translate in either direction, without changing settings each time.
 
@@ -6,17 +6,17 @@ This extension uses the same translation service as the desktop app. You do not 
 
 ## Install
 
-1. [Download the Chrome extension ZIP](https://github.com/kazunori279/live-translator/releases/download/chrome-v0.1.0/Live-Translator-Chrome.zip).
+1. [Download the Chrome extension ZIP](https://github.com/kazunori279/live-translator/releases/download/chrome-v0.1.1/Text-Live-Translator-Chrome.zip).
 2. Unzip it and keep the **live-translator-chrome** folder somewhere permanent. You do not need to download this repository.
 3. In Chrome on your computer, open `chrome://extensions`.
 4. Turn on **Developer mode**, click **Load unpacked**, and select the **live-translator-chrome** folder containing `manifest.json`.
-5. Open Chrome’s **Extensions** menu (the puzzle piece) and pin **Live Translator — Text Captions** to the toolbar.
+5. Open Chrome’s **Extensions** menu (the puzzle piece) and pin **Text Live Translator** to the toolbar.
 
 The extension is distributed as a ZIP and is not currently listed in the Chrome Web Store. Chrome’s Developer mode is needed to load this local extension; you do not need to enable remote debugging. Chrome 120 or later is required. Chrome on phones is not supported.
 
 ## Start translating
 
-1. Click the Live Translator toolbar icon.
+1. Click the Text Live Translator toolbar icon.
 2. Choose **Language 1** and **Language 2**. The ten popular languages appear first in each menu; the other languages follow alphabetically.
 3. Click **Start captions**. If Chrome asks for permission to read and change data on websites, allow it if you want captions to follow you across tabs. This access lets the extension read your selected text and add captions to the page. It is a site-access permission, not a remote debugging connection.
 4. Close the popup, open a regular web page, and select a sentence or paragraph. Pause briefly; the translation appears near the bottom of the page.

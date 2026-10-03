@@ -1,26 +1,28 @@
-# Live Translator for Chrome
+# Text Live Translator for Chrome
 
-Select text on a web page and see its translation as a caption on the same page. Live Translator automatically translates between your two chosen languages, so you can read English and Japanese pages without switching settings.
+Select text on a web page and see its translation as a caption on the same page. Text Live Translator automatically translates between your two chosen languages, so you can read English and Japanese pages without switching settings.
 
 ## What you need
 
-- An Apple Silicon Mac with the **Live Translator** app.
+- An Apple Silicon Mac with the **Text Live Translator** app.
 - Google Chrome with the remote debugging option available. Chrome 150 or later is recommended for reliable tab switching when other browser automation tools are connected.
 - An internet connection.
 
 You do not need a browser extension, microphone, API key, or developer tools installed. There is no need to download the source code.
 
+To update from **Live Translator**, quit the old app and replace it with **Text Live Translator.app**. Your saved language and connection settings are preserved.
+
 ## First-time setup
 
-1. [Download Live Translator for Mac (Apple Silicon)](https://github.com/kazunori279/live-translator/releases/download/desktop-v0.1.3/Live-Translator-mac-arm64.zip). This build supports Macs with an M-series chip; it does not support Intel Macs or Windows.
-2. Open the downloaded ZIP, then drag **Live Translator.app** to your **Applications** folder and open it.
+1. [Download Text Live Translator for Mac (Apple Silicon)](https://github.com/kazunori279/live-translator/releases/download/desktop-v0.1.4/Text-Live-Translator-mac-arm64.zip). This build supports Macs with an M-series chip; it does not support Intel Macs or Windows.
+2. Open the downloaded ZIP, then drag **Text Live Translator.app** to your **Applications** folder and open it.
 3. If macOS blocks the app, follow [Opening the app on macOS](#opening-the-app-on-macos) below: **System Settings → Privacy & Security → Open Anyway**.
-4. Click the `chrome://inspect/#remote-debugging` link in Live Translator to open Chrome’s setup page. You can also paste that address into Chrome’s address bar.
+4. Click the `chrome://inspect/#remote-debugging` link in Text Live Translator to open Chrome’s setup page. You can also paste that address into Chrome’s address bar.
 5. Enable **Allow remote debugging for this browser instance**. Keep Chrome open. A message such as `Server running at: 127.0.0.1:9222` means it is ready.
-6. Return to Live Translator and choose **Language 1** and **Language 2**.
-7. Click **Start captions**. Chrome may display a dialog asking whether to allow a remote debugging connection. Bring Chrome to the front if the dialog is hidden behind Live Translator.
-8. If you just started Live Translator, click **Allow** in Chrome’s dialog. This lets Live Translator read your selected text and display captions on the page. Remote debugging grants broad control of the browser, so only approve connection requests you recognize. This approval is separate from enabling remote debugging in Chrome’s settings.
-9. Return to Live Translator and wait for **Running**. If you cancel or deny the dialog, click **Stop**, then **Start captions** to try again.
+6. Return to Text Live Translator and choose **Language 1** and **Language 2**.
+7. Click **Start captions**. Chrome may display a dialog asking whether to allow a remote debugging connection. Bring Chrome to the front if the dialog is hidden behind Text Live Translator.
+8. If you just started Text Live Translator, click **Allow** in Chrome’s dialog. This lets Text Live Translator read your selected text and display captions on the page. Remote debugging grants broad control of the browser, so only approve connection requests you recognize. This approval is separate from enabling remote debugging in Chrome’s settings.
+9. Return to Text Live Translator and wait for **Running**. If you cancel or deny the dialog, click **Stop**, then **Start captions** to try again.
 
 Leave **Connection settings** at their defaults for normal use.
 
@@ -30,11 +32,11 @@ This app is **not Apple-notarized or Developer ID signed**. Version 0.1.2 and la
 
 If you trust this app and downloaded it from the GitHub release linked above:
 
-1. Open **Live Translator.app** from **Applications** once. If macOS blocks it, dismiss the message.
+1. Open **Text Live Translator.app** from **Applications** once. If macOS blocks it, dismiss the message.
 2. Open the **Apple menu → System Settings → Privacy & Security**.
-3. Scroll to the **Security** section and find the message about Live Translator being blocked.
+3. Scroll to the **Security** section and find the message about Text Live Translator being blocked.
 4. Click **Open Anyway**. Authenticate with Touch ID or your Mac password if prompted.
-5. Confirm **Open** in the next dialog. Live Translator should launch.
+5. Confirm **Open** in the next dialog. Text Live Translator should launch.
 
 This allows this app specifically; do not disable Gatekeeper system-wide. See [Apple’s instructions for opening apps safely](https://support.apple.com/102445).
 
@@ -54,14 +56,14 @@ Each language menu starts with ten popular choices: English, Japanese, Chinese, 
 
 To change languages, click **Stop**, choose a new pair, then click **Start captions** again. Choosing the language already on the other side swaps the pair.
 
-Select a new passage to translate something else. Clearing the selection, switching tabs, or going to another page removes the previous caption. Click **Stop**, or quit Live Translator, when you are finished. Your Chrome tabs stay open.
+Select a new passage to translate something else. Clearing the selection, switching tabs, or going to another page removes the previous caption. Click **Stop**, or quit Text Live Translator, when you are finished. Your Chrome tabs stay open.
 
 ## If something does not work
 
 | Problem | Try this |
 | --- | --- |
 | The app cannot find Chrome | Keep Chrome open and check that remote debugging is enabled on the page used during setup. Leave **Chrome endpoint** blank under **Connection settings**. |
-| The app stays on Connecting | Bring Chrome to the front and look for its remote debugging permission dialog. Click **Allow** for the connection you just started with Live Translator. If you dismissed or denied it, click **Stop**, then **Start captions** to retry. |
+| The app stays on Connecting | Bring Chrome to the front and look for its remote debugging permission dialog. Click **Allow** for the connection you just started with Text Live Translator. If you dismissed or denied it, click **Stop**, then **Start captions** to retry. |
 | Chrome disconnected | Reopen Chrome if needed, then click **Start captions** again. |
 | No caption appears | Bring the page to the front and select ordinary page text. Text inside images, PDFs, text boxes, and editors is not supported. Chrome settings pages are also excluded. |
 | Translation fails or times out | Check your internet connection. Clear the selection and select it again. Try a shorter passage; the limit is 10,000 characters. |

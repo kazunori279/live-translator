@@ -8,7 +8,7 @@ import { DEFAULT_SERVER } from '../src/translation.js';
 
 const server = createServer((_req, res) => {
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
-  res.end('<!doctype html><html><body style="font:24px system-ui;padding:60px;background:#f3f6fb"><h1>Live Translator — browser caption test</h1><p>Hello, thank you for your help.</p></body></html>');
+  res.end('<!doctype html><html><body style="font:24px system-ui;padding:60px;background:#f3f6fb"><h1>Text Live Translator — browser caption test</h1><p>Hello, thank you for your help.</p></body></html>');
 });
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 let browser;

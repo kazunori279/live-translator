@@ -2,9 +2,9 @@
 
 Real-time audio translation powered by Gemini Live API. Speak in any language and hear the translation immediately. The default is **conversation mode**: a bidirectional interpreter between the two selected languages (97 languages, glossary), so two people can talk to each other. Toggling **Simul** switches to simultaneous translation mode (78 languages, auto-detect source language, one-way into the target).
 
-[Desktop app — download and user guide](desktop/README.md)
+[Text Live Translator desktop app — download and user guide](desktop/README.md)
 
-[Chrome extension for selected-text captions — download and user guide](extension/README.md)
+[Text Live Translator Chrome extension — download and user guide](extension/README.md)
 
 ![Demo](demo.gif)
 

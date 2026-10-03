@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 
 const identity = process.env.MAC_SIGNING_IDENTITY;
 const outputs = await packager({
-  dir: '.', name: 'Live Translator', out: 'dist', overwrite: true,
+  dir: '.', name: 'Text Live Translator', out: 'dist', overwrite: true,
   icon: 'assets/icon.icns',
   appBundleId: 'com.electron.live-translator',
   ignore: /^\/(test|dist|scripts)($|\/)/,
@@ -17,7 +17,7 @@ const outputs = await packager({
 });
 for (const output of outputs) {
   if (process.platform === 'darwin') {
-    execFileSync('/usr/bin/codesign', ['--verify', '--deep', '--strict', '--verbose=2', `${output}/Live Translator.app`], { stdio: 'inherit' });
+    execFileSync('/usr/bin/codesign', ['--verify', '--deep', '--strict', '--verbose=2', `${output}/Text Live Translator.app`], { stdio: 'inherit' });
   }
   console.log(output);
 }

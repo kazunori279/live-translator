@@ -1,12 +1,19 @@
 import { app, BrowserWindow, ipcMain, session } from 'electron';
 import { connectChrome } from './chrome.js';
 import { readFile, writeFile } from 'node:fs/promises';
+import { mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { DEFAULT_SERVER, loadLanguages, serverURL } from './translation.js';
 import { SelectionWatcher } from './watcher.js';
+
+// Keep existing installations' preferences when changing the product name.
+const userDataPath = path.join(app.getPath('appData'), 'live-translator-desktop');
+mkdirSync(userDataPath, { recursive: true });
+app.setPath('userData', userDataPath);
+app.setName('Text Live Translator');
 
 const directory = path.dirname(fileURLToPath(import.meta.url));
 let window;
@@ -110,7 +117,7 @@ handle('start', async value => {
 handle('stop', stop);
 window = new BrowserWindow({
   width: 620, height: 720, minWidth: 480, minHeight: 600,
-  title: 'Live Translator', backgroundColor: '#f5f6fa',
+  title: 'Text Live Translator', backgroundColor: '#f5f6fa',
   webPreferences: { preload: path.join(directory, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true },
 });
 window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
