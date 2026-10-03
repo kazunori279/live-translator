@@ -13,6 +13,8 @@ function controls() {
   get('options').disabled = running || busy;
   get('start').disabled = running || busy;
   get('stop').disabled = !running || busy;
+  get('reconnect').disabled = !running || busy;
+  get('reconnect').hidden = !running;
   get('badge').textContent = running ? 'Running' : busy ? 'Loading' : 'Stopped';
   get('badge').classList.toggle('running', running);
 }
@@ -59,7 +61,14 @@ get('settingsForm').addEventListener('submit', async event => {
     const state = await send('start', { settings });
     running = state.enabled;
     preview(state.preview);
+    get('pageStatus').textContent = (await send('page')).message;
   } catch (error) { get('status').textContent = error.message; }
+  finally { busy = false; controls(); }
+});
+get('reconnect').addEventListener('click', async () => {
+  busy = true; controls();
+  try { get('pageStatus').textContent = (await send('reconnect')).message; }
+  catch (error) { get('pageStatus').textContent = error.message; }
   finally { busy = false; controls(); }
 });
 get('stop').addEventListener('click', async () => {
@@ -91,5 +100,6 @@ try {
   get('server').value = state.settings.server;
   await languages(state.settings.source, state.settings.target);
   preview(state.preview);
+  if (running) get('pageStatus').textContent = (await send('page')).message;
 } catch (error) { get('status').textContent = error.message; }
 finally { busy = false; controls(); }

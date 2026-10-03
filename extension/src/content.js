@@ -52,7 +52,7 @@ if (!globalThis.__liveTranslatorExtension) {
       }
     }, 600);
   }
-  document.addEventListener('selectionchange', () => scan());
+  document.addEventListener('selectionchange', () => scan(), true);
   document.addEventListener('focusin', () => scan());
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'visible') clear();
@@ -65,7 +65,11 @@ if (!globalThis.__liveTranslatorExtension) {
       if (!request.enabled) disable();
       else { enabled = true; scan(true); }
     }
-    if (request.type === 'scan') scan(true);
+    if (request.type === 'ping') respond({ connected: true, enabled, selectedLength: enabled ? read().length : 0 });
+    if (request.type === 'scan') {
+      if (request.enabled !== undefined) { revision++; enabled = request.enabled; }
+      scan(true);
+    }
     if (request.type === 'clearCaption') { clear(); }
     if (request.type === 'caption' && window === window.top) {
       if (enabled || request.text === '') showCaption(captionId, request.text, request.error);
@@ -79,10 +83,17 @@ if (!globalThis.__liveTranslatorExtension) {
     if (!chrome.runtime.id) { disable(); return; }
     if (enabled && document.getElementById(captionId)) showCaption(captionId, null);
   }, 2000);
-  const initialRevision = revision;
-  void message({ type: 'hello' }).then(reply => {
+  // Sites can consume selection events. Poll only the local selection as a
+  // fallback; scan debounces/deduplicates and the worker verifies the active tab.
+  setInterval(() => { if (enabled) scan(); }, 250);
+  async function sync() {
+    const initialRevision = revision;
+    const reply = await message({ type: 'hello' });
     if (initialRevision !== revision) return;
     enabled = reply?.value?.enabled === true;
     if (enabled) scan(true);
-  });
+  }
+  window.addEventListener('pageshow', () => { void sync(); });
+  window.addEventListener('focus', () => { if (!enabled) void sync(); }, true);
+  void sync();
 }

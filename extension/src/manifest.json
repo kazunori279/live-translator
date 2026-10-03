@@ -1,16 +1,33 @@
 {
   "manifest_version": 3,
   "name": "Text Live Translator",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Select text in Chrome to see a translated caption. Automatically translates both ways between your chosen languages.",
   "minimum_chrome_version": "120",
-  "permissions": ["storage", "scripting"],
+  "permissions": [
+    "storage",
+    "scripting"
+  ],
   "host_permissions": [
     "https://live-translation-761793285222.asia-northeast1.run.app/*",
     "https://live-translation-761793285222.us-central1.run.app/*"
   ],
-  "optional_host_permissions": ["https://*/*", "http://*/*"],
-  "background": { "service_worker": "background.js", "type": "module" },
-  "action": { "default_popup": "popup.html", "default_title": "Text Live Translator" },
-  "icons": { "16": "icons/16.png", "32": "icons/32.png", "48": "icons/48.png", "128": "icons/128.png" }
+  "optional_host_permissions": [
+    "https://*/*",
+    "http://*/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Text Live Translator"
+  },
+  "icons": {
+    "16": "icons/16.png",
+    "32": "icons/32.png",
+    "48": "icons/48.png",
+    "128": "icons/128.png"
+  }
 }

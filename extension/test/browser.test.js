@@ -42,7 +42,8 @@ test('MV3: popup, selections, two-way requests, new tabs, frames, cancellation, 
       return res.end(JSON.stringify({ text: body.text === 'こんにちは' ? 'Hello' : `訳: ${body.text}` }));
     }
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.end('<!doctype html><p>Hello world</p><h1>こんにちは</h1><h2>Slow selection</h2><h3>&lt;img src=x onerror=alert(1)&gt;</h3><input value="private text"><div contenteditable>Private draft</div>');
+    const blocker = req.url === '/blocked' ? '<script>window.addEventListener("selectionchange", e => e.stopImmediatePropagation(), true)</script>' : '';
+    res.end(blocker + '<!doctype html><p>Hello world</p><h1>こんにちは</h1><h2>Slow selection</h2><h3>&lt;img src=x onerror=alert(1)&gt;</h3><input value="private text"><div contenteditable>Private draft</div>');
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const url = `http://127.0.0.1:${server.address().port}`;
@@ -83,6 +84,15 @@ test('MV3: popup, selections, two-way requests, new tabs, frames, cancellation, 
   await select(page);
   await until(async () => (await caption(page)) === '訳: Hello world', 'first caption missing');
   assert.equal(requests[0].bidirectional, true);
+  const connection = await popup.evaluate(() => chrome.runtime.sendMessage({type: 'page'}));
+  assert.equal(connection.value.connected, true);
+  const recovered = await popup.evaluate(async () => {
+    const [tab] = await chrome.tabs.query({active: true, lastFocusedWindow: true});
+    await chrome.tabs.sendMessage(tab.id, {type: 'enabled', enabled: false});
+    return chrome.runtime.sendMessage({type: 'reconnect'});
+  });
+  assert.equal(recovered.value.connected, true);
+  await until(async () => (await caption(page)) === '訳: Hello world', 'reconnect did not restore captions');
   await select(page, 'h1');
   await until(async () => (await caption(page)) === 'Hello', 'reverse direction caption missing');
   await page.focus('input'); await wait(800);
@@ -103,6 +113,10 @@ test('MV3: popup, selections, two-way requests, new tabs, frames, cancellation, 
   await second.goto(url); await second.bringToFront(); await select(second);
   await until(async () => (await caption(second)) === '訳: Hello world', 'new tab was not translated');
   assert.equal(await caption(page), '');
+  await second.goto(`${url}/blocked`); await select(second, 'h1');
+  await until(async () => (await caption(second)) === 'Hello', 'site consumed selection event without fallback');
+  await second.evaluate(() => getSelection().removeAllRanges());
+  await until(async () => !await caption(second), 'selection clear was missed when site consumed events');
   await page.bringToFront(); await select(page);
   await until(async () => (await caption(page)) === '訳: Hello world', 'return to old tab failed');
   await until(async () => !await caption(second), 'caption remained on old tab');

@@ -45,7 +45,32 @@ async function focusChanged() {
   if (!state.enabled) return;
   await report({ message: 'Select text in the active Chrome tab.' });
   const tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-  for (const tab of tabs) if (await isActive(tab.id)) await send(tab.id, { type: 'scan' });
+  for (const tab of tabs) if (await isActive(tab.id)) await send(tab.id, { type: 'scan', enabled: true });
+}
+
+async function pageConnection(repair = false) {
+  await ready;
+  const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+  if (!tab) return { connected: false, message: 'No active Chrome tab.' };
+  if (tab.url && !/^https?:\/\//.test(tab.url)) {
+    return { connected: false, message: 'This page is unsupported. Open a regular web page.' };
+  }
+  if (repair) {
+    if (!state.enabled) throw new Error('Start captions before reconnecting the page.');
+    try {
+      await chrome.scripting.executeScript({ target: { tabId: tab.id, frameIds: [0] }, files: ['content.js'], injectImmediately: true });
+      await chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, files: ['content.js'], injectImmediately: true }).catch(() => {});
+      await send(tab.id, { type: 'enabled', enabled: true });
+    } catch {
+      throw new Error('Cannot access this page. Check Chrome’s site access for Text Live Translator, then refresh the page.');
+    }
+  }
+  const reply = await send(tab.id, { type: 'ping' }, { frameId: 0 });
+  if (!reply?.connected) return { connected: false, message: 'Page not connected. Click Reconnect page. If it fails, check Chrome’s site access for this website.' };
+  if (!reply.enabled && state.enabled) {
+    await send(tab.id, { type: 'enabled', enabled: true });
+  }
+  return { connected: true, message: state.enabled ? 'Page connected. Select ordinary page text to translate.' : 'Page connected. Start captions to translate.' };
 }
 
 async function select(message, sender) {
@@ -101,7 +126,7 @@ async function start(settings) {
   if (!scripts.length) {
     await chrome.scripting.registerContentScripts([{
       id: 'captions', matches: ORIGINS, js: ['content.js'], allFrames: true,
-      runAt: 'document_idle', persistAcrossSessions: false,
+      runAt: 'document_start', persistAcrossSessions: false,
     }]);
   }
   state.enabled = true;
@@ -111,7 +136,7 @@ async function start(settings) {
   // Register handles future tabs/navigations; inject handles already-open pages.
   const tabs = await chrome.tabs.query({});
   await Promise.all(tabs.map(tab => chrome.scripting.executeScript({
-    target: { tabId: tab.id, allFrames: true }, files: ['content.js'],
+    target: { tabId: tab.id, allFrames: true }, files: ['content.js'], injectImmediately: true,
   }).catch(() => {})));
   await broadcast({ type: 'enabled', enabled: true });
   await focusChanged();
@@ -141,6 +166,8 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
   const content = sender.tab && /^https?:\/\//.test(sender.url || '');
   let task;
   if (ui) {
+    if (message.type === 'page') task = pageConnection();
+    if (message.type === 'reconnect') task = pageConnection(true);
     if (message.type === 'state') task = ready.then(() => state);
     if (message.type === 'languages') task = loadLanguages(message.server);
     if (message.type === 'start') task = control(() => start(message.settings));
