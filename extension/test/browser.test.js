@@ -116,10 +116,11 @@ test('MV3: popup, selections, two-way requests, new tabs, frames, cancellation, 
   await second.goto(`${url}/blocked`); await select(second, 'h1');
   await until(async () => (await caption(second)) === 'Hello', 'site consumed selection event without fallback');
   await second.evaluate(() => getSelection().removeAllRanges());
-  await until(async () => !await caption(second), 'selection clear was missed when site consumed events');
+  await wait(800);
+  assert.equal(await caption(second), 'Hello', 'selection clear removed completed caption');
   await page.bringToFront(); await select(page);
   await until(async () => (await caption(page)) === '訳: Hello world', 'return to old tab failed');
-  await until(async () => !await caption(second), 'caption remained on old tab');
+  assert.equal(await caption(second), 'Hello', 'caption disappeared from old tab');
   await page.evaluate(url => {
     const frame = document.createElement('iframe'); frame.src = url; document.body.append(frame);
   }, url.replace('127.0.0.1', 'localhost'));
@@ -136,6 +137,13 @@ test('MV3: popup, selections, two-way requests, new tabs, frames, cancellation, 
   await wait(200);
   await select(page, 'h1');
   await until(async () => (await caption(page)) === 'Hello', 'worker restart lost settings/running state');
+  await page.evaluate(() => getSelection().removeAllRanges());
+  await second.bringToFront();
+  await wait(11000);
+  assert.equal(await caption(page), 'Hello', 'retained caption disappeared in background');
+  await page.bringToFront();
+  await select(page);
+  await until(async () => (await caption(page)) === '訳: Hello world', 'new selection did not replace retained caption');
   await popup.bringToFront();
   await popup.click('#stop');
   await popup.waitForFunction(() => document.getElementById('badge').textContent === 'Stopped');

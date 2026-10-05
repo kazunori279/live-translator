@@ -35,7 +35,7 @@ if (!globalThis.__liveTranslatorExtension) {
     clearTimeout(timer);
     token = '';
     selectedText = '';
-    showCaption(captionId, '');
+    showCaption(captionId, '', false, false, true);
   }
   function scan(force = false) {
     if (!enabled) return;
@@ -72,13 +72,13 @@ if (!globalThis.__liveTranslatorExtension) {
     }
     if (request.type === 'clearCaption') { clear(); }
     if (request.type === 'caption' && window === window.top) {
-      if (enabled || request.text === '') showCaption(captionId, request.text, request.error);
+      if (enabled || request.text === '') showCaption(captionId, request.text, request.error, request.persistent);
     }
     if (request.type === 'check') {
       respond({ selected: enabled && token === request.token && !!selectedText && read() === selectedText });
     }
   });
-  // Captions expire if extension execution is interrupted or the extension is removed.
+  // Refresh temporary status messages and clean up if the extension is removed.
   setInterval(() => {
     if (!chrome.runtime.id) { disable(); return; }
     if (enabled && document.getElementById(captionId)) showCaption(captionId, null);
@@ -92,6 +92,7 @@ if (!globalThis.__liveTranslatorExtension) {
     if (initialRevision !== revision) return;
     enabled = reply?.value?.enabled === true;
     if (enabled) scan(true);
+    else disable();
   }
   window.addEventListener('pageshow', () => { void sync(); });
   window.addEventListener('focus', () => { if (!enabled) void sync(); }, true);

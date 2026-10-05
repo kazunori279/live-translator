@@ -14,7 +14,7 @@ To update from **Live Translator**, quit the old app and replace it with **Text 
 
 ## First-time setup
 
-1. [Download Text Live Translator for Mac (Apple Silicon)](https://github.com/kazunori279/live-translator/releases/download/desktop-v0.1.4/Text-Live-Translator-mac-arm64.zip). This build supports Macs with an M-series chip; it does not support Intel Macs or Windows.
+1. [Download Text Live Translator for Mac (Apple Silicon)](https://github.com/kazunori279/live-translator/releases/download/desktop-v0.1.5/Text-Live-Translator-mac-arm64.zip). This build supports Macs with an M-series chip; it does not support Intel Macs or Windows.
 2. Open the downloaded ZIP, then drag **Text Live Translator.app** to your **Applications** folder and open it.
 3. If macOS blocks the app, follow [Opening the app on macOS](#opening-the-app-on-macos) below: **System Settings → Privacy & Security → Open Anyway**.
 4. Click the `chrome://inspect/#remote-debugging` link in Text Live Translator to open Chrome’s setup page. You can also paste that address into Chrome’s address bar.
@@ -56,7 +56,15 @@ Each language menu starts with ten popular choices: English, Japanese, Chinese, 
 
 To change languages, click **Stop**, choose a new pair, then click **Start captions** again. Choosing the language already on the other side swaps the pair.
 
-Select a new passage to translate something else. Clearing the selection, switching tabs, or going to another page removes the previous caption. Click **Stop**, or quit Text Live Translator, when you are finished. Your Chrome tabs stay open.
+Select a new passage to translate something else. Click **Stop**, or quit Text Live Translator, when you are finished. Your Chrome tabs stay open.
+
+## Captions stay on each tab
+
+Completed translations stay on their original tab automatically, even when you clear the selection or switch tabs. Select another passage on that tab to replace its caption; other tabs keep their own captions.
+
+Click **Stop** to remove all captions. Navigating, reloading, or closing a page removes its caption. Captions are not saved between page loads.
+
+If you share a Chrome tab, its translation remains there while you work in another tab. Captions do not follow you onto other tabs or open a separate window.
 
 ## If something does not work
 

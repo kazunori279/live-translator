@@ -18,8 +18,8 @@ async function send(tabId, message, options) {
   try { return await chrome.tabs.sendMessage(tabId, message, options); }
   catch { /* Restricted pages, removed frames, or tabs without our content script. */ }
 }
-async function caption(tabId, text, error = false) {
-  await send(tabId, { type: 'caption', text, error }, { frameId: 0 });
+async function caption(tabId, text, error = false, persistent = false) {
+  await send(tabId, { type: 'caption', text, error, persistent }, { frameId: 0 });
 }
 async function isActive(tabId) {
   try {
@@ -102,7 +102,7 @@ async function select(message, sender) {
     const stillSelected = await send(job.tabId, { type: 'check', token: job.token },
       job.documentId ? { documentId: job.documentId } : { frameId: job.frameId });
     if (!stillSelected?.selected || !await valid()) return;
-    await caption(job.tabId, result);
+    await caption(job.tabId, result, false, true);
     await report({ message: 'Caption displayed. Select another passage to translate.', original: text, translation: result });
   } catch (error) {
     if (error.name === 'AbortError' || !await valid()) return;

@@ -97,7 +97,7 @@ export class SelectionWatcher {
     this.translator({ ...this.options, text: snapshot.text, signal: this.abort.signal })
       .then(async text => {
         if (!await this.isCurrent(snapshot, generation)) return;
-        await this.caption(snapshot.page, text);
+        await this.caption(snapshot.page, text, false, true);
         if (this.running && generation === this.generation) {
           this.report({ message: 'Caption displayed. Select another passage to translate.', translation: text });
         }
@@ -120,8 +120,8 @@ export class SelectionWatcher {
     } catch { return false; }
   }
 
-  async caption(page, text, error = false) {
-    try { await page.mainFrame().isolatedRealm().evaluate(showCaption, this.captionId, text, error); }
+  async caption(page, text, error = false, persistent = false) {
+    try { await page.mainFrame().isolatedRealm().evaluate(showCaption, this.captionId, text, error, persistent); }
     catch { /* Closed/navigated pages no longer need a caption. */ }
   }
 

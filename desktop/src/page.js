@@ -17,9 +17,10 @@ export function readSelection(key) {
   return { focused: true, text, documentId: globalThis[key].documentId, url: location.href };
 }
 
-export function showCaption(id, text, error = false) {
+export function showCaption(id, text, error = false, persistent = false, force = false) {
   let host = document.getElementById(id);
   const timerKey = `${id}_expiry`;
+  if (text === '' && host?.dataset.persistent === 'true' && !force) return;
   clearTimeout(globalThis[timerKey]);
   delete globalThis[timerKey];
   if (text === '') { host?.remove(); return; }
@@ -36,16 +37,19 @@ export function showCaption(id, text, error = false) {
     label.setAttribute('role', 'status');
     label.setAttribute('aria-live', 'polite');
     shadow.append(style, label);
+    window.addEventListener('pagehide', () => host.remove(), { once: true });
     (document.fullscreenElement || document.documentElement).append(host);
   }
   const label = host.shadowRoot.querySelector('div');
   if (text !== null) {
     label.textContent = text;
     label.className = error ? 'error' : '';
+    host.dataset.persistent = String(persistent && !error);
   }
   // Top layer makes the caption visible above site dialogs and fullscreen content.
   try { if (!host.matches(':popover-open')) host.showPopover(); } catch { /* Older Chrome. */ }
-  // Renewed while the app is connected. A crash or lost CDP connection must not
+  if (host.dataset.persistent === 'true') return;
+  // Temporary status messages are renewed while the app is connected. A crash or lost CDP connection must not
   // leave an orphan caption on the user's page indefinitely.
   globalThis[timerKey] = setTimeout(() => {
     host.remove();

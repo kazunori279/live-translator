@@ -82,7 +82,7 @@ test('real Chrome: selection, iframe, safe caption, cancellation, tab changes, c
   await second.bringToFront();
   await select(second);
   assert.equal((await page.mainFrame().isolatedRealm().evaluate(readSelection, 'testState')).focused, true);
-  await until(async () => !await page.$(`#${watcher.captionId}`), 'caption stayed on inactive tab');
+  assert.equal(await page.evaluate(id => document.getElementById(id)?.shadowRoot.querySelector('div').textContent, watcher.captionId), '新しい字幕');
   await until(() => jobs.length === 3, 'active tab did not follow');
   jobs[2].resolve('別のタブ');
   await until(async () => !!await second.$(`#${watcher.captionId}`), 'second tab caption missing');
@@ -121,6 +121,15 @@ test('real Chrome: selection, iframe, safe caption, cancellation, tab changes, c
   await until(() => jobs.length === 6, 'newly opened tab was not detected');
   jobs[5].resolve('新しいタブ');
   await until(async () => await third.evaluate(id => document.getElementById(id)?.shadowRoot.textContent.includes('新しいタブ'), watcher.captionId), 'caption missing on newly opened tab');
+  await third.evaluate(() => getSelection().removeAllRanges());
+  await second.bringToFront();
+  await wait(11000);
+  assert.equal(await third.evaluate(id => document.getElementById(id)?.shadowRoot.querySelector('div').textContent, watcher.captionId), '新しいタブ');
+  await third.bringToFront();
+  await select(third, 'h1');
+  await until(() => jobs.length === 7, 'new selection did not replace retained caption');
+  jobs[6].resolve('停止で消える字幕');
+  await until(async () => await third.evaluate(id => document.getElementById(id)?.shadowRoot.textContent.includes('停止で消える字幕'), watcher.captionId), 'replacement caption missing');
   await watcher.stop();
   assert.equal(await third.$(`#${watcher.captionId}`), null);
   assert.equal(await second.$(`#${watcher.captionId}`), null);

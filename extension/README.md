@@ -6,7 +6,7 @@ This extension uses the same translation service as the desktop app. You do not 
 
 ## Install
 
-1. [Download the Chrome extension ZIP](https://github.com/kazunori279/live-translator/releases/download/chrome-v0.1.2/Text-Live-Translator-Chrome.zip).
+1. [Download the Chrome extension ZIP](https://github.com/kazunori279/live-translator/releases/download/chrome-v0.1.3/Text-Live-Translator-Chrome.zip).
 2. Unzip it and keep the **live-translator-chrome** folder somewhere permanent. You do not need to download this repository.
 3. In Chrome on your computer, open `chrome://extensions`.
 4. Turn on **Developer mode**, click **Load unpacked**, and select the **live-translator-chrome** folder containing `manifest.json`.
@@ -27,6 +27,14 @@ With **English ⇄ Japanese** selected, English becomes Japanese and Japanese be
 The toolbar badge shows **ON** while captions are running. Closing the popup keeps translation running. To finish, open the popup and click **Stop**; this stops translation requests and removes captions. To change languages, stop captions, choose a new pair, and start again.
 
 Your language and server preferences are saved. After restarting Chrome, click **Start captions** again. If you have also been using the desktop app, stop its captions to avoid duplicate overlays.
+
+## Captions stay on each tab
+
+Completed translations stay on their original tab automatically, even when you clear the selection or switch tabs. Select another passage on that tab to replace its caption; other tabs keep their own captions.
+
+Click **Stop** to remove all captions. Navigating, reloading, or closing a page removes its caption. Captions are not saved between page loads.
+
+If you share a Chrome tab, its translation remains there while you work in another tab. Captions do not follow you onto other tabs or open a separate window.
 
 ## Connection settings
 
