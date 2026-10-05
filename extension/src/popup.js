@@ -1,6 +1,7 @@
 import { languageGroups, languagePair } from '../../desktop/src/languages.js';
 import { DEFAULT_SERVER, serverURL } from '../../desktop/src/translation.js';
 const get = id => document.getElementById(id);
+get('version').textContent = `Version ${chrome.runtime.getManifest().version}`;
 let running = false;
 let busy = true;
 let previousPair = { source: 'en', target: 'ja' };

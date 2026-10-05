@@ -6,7 +6,7 @@ This extension uses the same translation service as the desktop app. You do not 
 
 ## Install
 
-1. [Download the Chrome extension ZIP](https://github.com/kazunori279/live-translator/releases/download/chrome-v0.1.4/Text-Live-Translator-Chrome.zip).
+1. [Download the Chrome extension ZIP](https://github.com/kazunori279/live-translator/releases/download/chrome-v0.1.5/Text-Live-Translator-Chrome.zip).
 2. Unzip it and keep the **live-translator-chrome** folder somewhere permanent. You do not need to download this repository.
 3. In Chrome on your computer, open `chrome://extensions`.
 4. Turn on **Developer mode**, click **Load unpacked**, and select the **live-translator-chrome** folder containing `manifest.json`.

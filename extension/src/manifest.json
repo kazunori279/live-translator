@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Text Live Translator",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Select text in Chrome to see a translated caption. Automatically translates both ways between your chosen languages.",
   "minimum_chrome_version": "120",
   "permissions": [
