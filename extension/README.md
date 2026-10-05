@@ -14,6 +14,20 @@ This extension uses the same translation service as the desktop app. You do not 
 
 The extension is distributed as a ZIP and is not currently listed in the Chrome Web Store. Chrome’s Developer mode is needed to load this local extension; you do not need to enable remote debugging. Chrome 120 or later is required. Chrome on phones is not supported.
 
+## Update or reload the extension
+
+ZIP installations do not update automatically. To install a newer version:
+
+1. Open Text Live Translator and click **Stop**.
+2. Download the ZIP linked in [Install](#install) and unzip it.
+3. Replace the files inside the **live-translator-chrome** folder you originally loaded into Chrome with the files from the new download. Keep the same folder location; do not create another nested **live-translator-chrome** folder.
+4. Open `chrome://extensions` and make sure **Developer mode** is on.
+5. Find **Text Live Translator** and click its **Reload** button (the circular arrow). You do not need to remove the extension or click **Load unpacked** again.
+6. Refresh each open web page where you want to use captions, using Chrome’s page reload button or **Command+R** on Mac (**Ctrl+R** on Windows/Linux).
+7. Open the extension popup. Check the **Version** number at the bottom to confirm the update, then click **Start captions**.
+
+To reload your current version without updating it, follow steps 1 and 4–7. Reloading the extension and refreshing web pages are separate steps; both are needed to replace the code running in already-open tabs.
+
 ## Start translating
 
 1. Click the Text Live Translator toolbar icon.
@@ -58,8 +72,6 @@ The default translation server is in Tokyo. Leave it unchanged for normal use. T
 | A managed browser blocks installation | Your organization may restrict unpacked extensions. Ask its administrator whether installation is allowed. |
 
 On a company-managed Mac, check `chrome://policy` for **ExtensionSettings**, especially **runtime_blocked_hosts**. An administrator can prevent extensions from running on specific websites even when those websites open normally. Company network controls can also block access to the translation server. Ask your administrator to confirm the permitted sites and server access; reconnecting cannot override these policies. [Chrome Enterprise policy documentation](https://support.google.com/chrome/a/answer/9867568).
-
-To update an unpacked installation, stop captions, replace the contents of the installed extension folder with the new download, and click the extension’s **Reload** button on `chrome://extensions`. Refresh open web pages before starting captions again.
 
 ## Privacy
 
