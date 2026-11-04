@@ -128,6 +128,40 @@ Fullscreen is a separate click from *Select Window* on purpose; the two can't be
 
 Both windows have to be in the same browser, and it must be Chrome. No OBS or other tools are needed.
 
+#### Subtitle settings
+
+1. In the caption window, click **字幕設定 / Caption settings** in the top-left, or press **S** while focus is outside an input or button.
+2. Adjust the values below. After typing a value, click outside the field or press **Tab** to apply it. Translation can keep running while you adjust the display.
+3. Close the settings panel before showing the output to the audience. Move the mouse away and wait 4 seconds for the controls to hide; move the mouse to reveal them again.
+
+| Setting in the UI | Range | Default | Effect |
+| --- | --- | --- | --- |
+| **1行の最大文字数** | 5–120 characters | 32 | Maximum characters in each displayed row. Text wraps earlier when the available width is narrower. |
+| **最大表示行数（2〜4）** | 2–4 lines | 3 | Maximum number of visible rows across all subtitles, including wrapped rows within a long utterance. |
+| **フォントサイズ（px）** | 16–120 px | 32 | Fixed font size; long text does not make the font shrink. |
+
+Changes apply to the current subtitles and are saved for the same browser profile and site. Other caption windows on the same site receive the updated settings too. Settings on the Tokyo and US endpoints are stored separately.
+
+Long utterances wrap automatically at the character or pixel-width limit. As new rows arrive, the oldest rows leave the display and the newest rows remain visible; this also works while an utterance is still being translated. Completed utterances disappear after 8 seconds. The line setting is a maximum, so fewer rows appear when there is less text or the window is too short to fit the selected number at the chosen font size.
+
+#### Dedicated stage LED subtitle area
+
+Use this mode when the event has a separate translation area instead of subtitles over the slides:
+
+1. Start translation in the main app, then open **Caption**.
+2. Choose **字幕のみ表示 / Captions only**. This shows subtitles on a black background without asking to capture another window.
+3. Size the caption window to match the subtitle area's aspect ratio, or move it to the dedicated display and enter fullscreen with **⛶ Fullscreen** or **F**. **Esc** exits fullscreen.
+4. Open **Caption settings** and set the maximum lines to **2**, **3**, or **4**. Start with **32 characters** and **32 px**, then adjust using representative long translations at the actual output size.
+5. Close the settings panel and let the controls hide before the event starts.
+
+For example, a 1920 × 270 caption viewport can fit four rows at 40 px: four rows use 224 px of line height, plus 32 px of vertical margins. Choose the font size for the actual browser viewport; downstream LED or OBS scaling changes the apparent size. If fewer rows appear than requested, reduce the font size or increase the viewport height.
+
+#### Using the caption window with OBS
+
+Add an OBS **Window Capture** source for the Chrome caption window, then position and scale it into the dedicated subtitle area. Keep the main translation page and caption window open in the same Chrome profile on the same site.
+
+An independent OBS **Browser Source** does not receive the translation feed: captions use BroadcastChannel between pages in the same browser profile and origin. Capture the Chrome window instead. Keep the settings panel closed during output because it is part of the captured window.
+
 ### Connection States
 
 The dot in the top-right corner shows:

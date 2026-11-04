@@ -36,26 +36,27 @@
     #fsBtn.faded { opacity: 0; pointer-events: none; }
 
     #lines {
-      position: fixed; bottom: 2rem; left: 2rem; right: 2rem;
+      position: fixed; bottom: 16px; left: 16px; right: 16px;
+      overflow: hidden; max-height: calc(100% - 32px);
       display: flex; flex-direction: column; align-items: center;
-      gap: 0.3rem; pointer-events: none; z-index: 20;
+      gap: 0; pointer-events: none; z-index: 20;
     }
 
     .line {
-      font-size: 2rem; line-height: 1.4; color: #fff;
+      font-size: var(--caption-font-size, 32px); line-height: 1.4; color: #fff;
       background: rgba(0, 0, 0, 0.7);
-      padding: 0.25rem 0.8rem; border-radius: 0.4rem;
-      max-width: 90%; text-align: center; word-wrap: break-word;
+      padding: 0 12px; flex-shrink: 0; border-radius: 0.4rem;
+      max-width: 100%; text-align: center; white-space: pre; overflow: hidden;
       animation: line-in 0.25s ease-out;
     }
-    .line.fade-out { animation: line-out 0.8s ease-in forwards; }
-
-    .typing-indicator {
-      display: inline-block; width: 0.5rem; height: 0.5rem;
-      background: rgba(255, 255, 255, 0.7); border-radius: 50%;
-      margin-left: 0.3rem; vertical-align: middle;
-      animation: blink 0.8s infinite;
-    }
+    #settings { position: fixed; top: 16px; left: 16px; z-index: 40;
+      padding: 12px; border-radius: 6px; background: #202124; color: white; }
+    #settings summary { cursor: pointer; }
+    #settings label { display: flex; justify-content: space-between; gap: 16px; margin-top: 12px; }
+    #settings input { width: 80px; font-size: 16px; }
+    #settings p { max-width: 320px; font-size: 13px; margin-top: 12px; }
+    #settings.faded { opacity: 0; pointer-events: none; }
+    @media (prefers-reduced-motion: reduce) { .line { animation: none; } }
 
     @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
     @keyframes line-in { from { opacity: 0; transform: translateY(0.5rem); } to { opacity: 1; transform: translateY(0); } }
@@ -69,23 +70,73 @@
     <h2>Caption Overlay</h2>
     <p>Select a window to mirror. Translated subtitles will appear at the bottom. Share this window on Google Meet.</p>
     <button id="startCapture">Select Window</button>
+    <button id="captionsOnly">字幕のみ表示 / Captions only</button>
     <p class="hint">Once mirroring starts, click <b>Fullscreen</b> (or press <b>F</b> / double-click) — <b>Esc</b> exits.</p>
   </div>
 
   <button id="fsBtn" class="hidden" title="Fullscreen (F)">⛶ Fullscreen</button>
 
-  <div id="lines"></div>
+  <details id="settings">
+    <summary>字幕設定 / Caption settings</summary>
+    <label>1行の最大文字数 <input id="maxChars" type="number" min="5" max="120" step="1"></label>
+    <label>最大表示行数（2〜4） <input id="maxLines" type="number" min="2" max="4" step="1"></label>
+    <label>フォントサイズ（px） <input id="fontSize" type="number" min="16" max="120" step="1"></label>
+    <p>幅に合わせて自動改行し、古い行から切り替えます。設定はこのブラウザに保存されます。Sキーで設定を開閉できます。</p>
+  </details>
+  <div id="lines" aria-live="off"></div>
 
-  <script>
-    const MAX_LINES = 3;
+  <script type="module">
+    import { DEFAULTS, normalizeSettings, visibleRows } from "/static/js/caption-layout.mjs";
     const FADE_DELAY_MS = 8000;
     const video = document.getElementById("video");
     const prompt = document.getElementById("prompt");
     const linesEl = document.getElementById("lines");
     const channel = new BroadcastChannel("live-translator");
 
-    let currentLine = null;
-    let currentText = "";
+    let currentEntry = null;
+    let entries = [];
+    let captionsOnly = false;
+    const settingsEl = document.getElementById("settings");
+    const storageKey = "live-translator-caption-settings";
+    let settings = { ...DEFAULTS };
+    try { settings = normalizeSettings(JSON.parse(localStorage.getItem(storageKey)) || DEFAULTS); } catch {}
+    const measureContext = document.createElement("canvas").getContext("2d");
+    function applySettings() {
+      document.documentElement.style.setProperty("--caption-font-size", `${settings.fontSize}px`);
+      for (const key of Object.keys(DEFAULTS)) document.getElementById(key).value = settings[key];
+      render();
+    }
+    for (const key of Object.keys(DEFAULTS)) {
+      document.getElementById(key).addEventListener("change", (event) => {
+        settings = normalizeSettings({ ...settings, [key]: event.target.value || DEFAULTS[key] });
+        try { localStorage.setItem(storageKey, JSON.stringify(settings)); } catch {}
+        applySettings();
+      });
+    }
+    window.addEventListener("storage", event => {
+      if (event.key !== storageKey) return;
+      try { settings = normalizeSettings(JSON.parse(event.newValue) || DEFAULTS); applySettings(); } catch {}
+    });
+    function render() {
+      entries = entries.filter(entry => entry.expires > Date.now());
+      measureContext.font = `${settings.fontSize}px ${getComputedStyle(linesEl).fontFamily}`;
+      const width = Math.max(1, linesEl.clientWidth - 24);
+      const fittedLines = Math.min(settings.maxLines, Math.max(0,
+        Math.floor((window.innerHeight - 32) / (settings.fontSize * 1.4))));
+      const rows = fittedLines ? visibleRows(entries, { ...settings, maxLines: fittedLines },
+        width, text => measureContext.measureText(text).width) : [];
+      // Reuse unchanged rows so streaming updates do not restart every animation.
+      while (linesEl.children.length > rows.length) linesEl.lastChild.remove();
+      rows.forEach((text, i) => {
+        let row = linesEl.children[i];
+        if (!row) { row = document.createElement("div"); row.className = "line"; linesEl.appendChild(row); }
+        if (row.textContent !== text) row.textContent = text;
+      });
+    }
+    applySettings();
+    window.addEventListener("resize", render);
+    document.fonts.ready.then(render);
+    setInterval(render, 500);
 
     /**
      * Fullscreen.
@@ -121,10 +172,14 @@
 
     /** Show the Fullscreen button, then fade it out so it stays off the slides. */
     function showFsBtn() {
-      if (!video.srcObject || document.fullscreenElement) return;
+      if (!video.srcObject && !captionsOnly) return;
+      settingsEl.classList.remove("faded");
       fsBtn.classList.remove("hidden", "faded");
       clearTimeout(fsFadeTimer);
-      fsFadeTimer = setTimeout(() => fsBtn.classList.add("faded"), 4000);
+      fsFadeTimer = setTimeout(() => {
+        fsBtn.classList.add("faded");
+        if (!settingsEl.open) settingsEl.classList.add("faded");
+      }, 4000);
     }
 
     function hideFsBtn() {
@@ -137,6 +192,12 @@
     document.addEventListener("fullscreenchange", () => {
       if (document.fullscreenElement) hideFsBtn();
       else showFsBtn();
+    });
+
+    document.getElementById("captionsOnly").addEventListener("click", () => {
+      captionsOnly = true;
+      prompt.classList.add("hidden");
+      showFsBtn();
     });
 
     document.getElementById("startCapture").addEventListener("click", async () => {
@@ -161,79 +222,42 @@
     });
 
     document.addEventListener("keydown", (e) => {
-      if (e.key === "f" || e.key === "F") toggleFullscreen();
+      if (e.target.closest("input, button, summary")) return;
+      if (e.key.toLowerCase() === "f") toggleFullscreen();
+      if (e.key.toLowerCase() === "s") {
+        settingsEl.classList.remove("faded");
+        settingsEl.open = !settingsEl.open;
+        showFsBtn();
+      }
     });
-
-    document.addEventListener("dblclick", () => toggleFullscreen());
-
-    function addLine(text, partial) {
-      const div = document.createElement("div");
-      div.className = "line";
-      div.textContent = text;
-      if (partial) {
-        const dot = document.createElement("span");
-        dot.className = "typing-indicator";
-        div.appendChild(dot);
-      }
-      linesEl.appendChild(div);
-      currentLine = div;
-      currentText = text;
-      trimLines();
-      if (!partial) scheduleFade(div);
-    }
-
-    function updateLine(text, partial) {
-      if (!currentLine) { addLine(text, partial); return; }
-      const dot = currentLine.querySelector(".typing-indicator");
-      if (dot) dot.remove();
-      currentLine.textContent = text;
-      currentText = text;
-      if (partial) {
-        const d = document.createElement("span");
-        d.className = "typing-indicator";
-        currentLine.appendChild(d);
-      } else {
-        scheduleFade(currentLine);
-      }
-    }
+    document.addEventListener("dblclick", e => {
+      if (!e.target.closest("#settings, button")) toggleFullscreen();
+    });
+    settingsEl.addEventListener("toggle", showFsBtn);
 
     function finalize() {
-      if (currentLine) {
-        const dot = currentLine.querySelector(".typing-indicator");
-        if (dot) dot.remove();
-        scheduleFade(currentLine);
-      }
-      currentLine = null;
-      currentText = "";
-    }
-
-    function scheduleFade(el) {
-      setTimeout(() => {
-        el.classList.add("fade-out");
-        el.addEventListener("animationend", () => el.remove());
-      }, FADE_DELAY_MS);
-    }
-
-    function trimLines() {
-      while (linesEl.children.length > MAX_LINES) {
-        linesEl.removeChild(linesEl.firstChild);
-      }
+      if (currentEntry) currentEntry.expires = Date.now() + FADE_DELAY_MS;
+      currentEntry = null;
+      render();
     }
 
     channel.onmessage = (e) => {
       const msg = e.data;
-      if (msg.type === "outputTranscription") {
-        if (!currentLine) {
-          addLine(msg.text, !msg.finished);
-        } else {
-          updateLine(msg.text, !msg.finished);
+      if (msg.type === "outputTranscription" && typeof msg.text === "string") {
+        if (!currentEntry) {
+          currentEntry = { text: "", expires: Infinity };
+          entries.push(currentEntry);
+          entries = entries.slice(-4);
         }
-        if (msg.finished) {
-          currentLine = null;
-          currentText = "";
-        }
-      } else if (msg.type === "turnComplete") {
+        currentEntry.text = msg.text;
+        if (msg.finished) finalize();
+        else render();
+      } else if (msg.type === "turnComplete" || msg.type === "disconnected") {
         finalize();
+      } else if (msg.type === "connected") {
+        entries = [];
+        currentEntry = null;
+        render();
       }
     };
   </script>
