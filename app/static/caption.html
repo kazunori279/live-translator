@@ -70,18 +70,18 @@
     <h2>Caption Overlay</h2>
     <p>Select a window to mirror. Translated subtitles will appear at the bottom. Share this window on Google Meet.</p>
     <button id="startCapture">Select Window</button>
-    <button id="captionsOnly">字幕のみ表示 / Captions only</button>
+    <button id="captionsOnly">Captions only</button>
     <p class="hint">Once mirroring starts, click <b>Fullscreen</b> (or press <b>F</b> / double-click) — <b>Esc</b> exits.</p>
   </div>
 
   <button id="fsBtn" class="hidden" title="Fullscreen (F)">⛶ Fullscreen</button>
 
   <details id="settings">
-    <summary>字幕設定 / Caption settings</summary>
-    <label>1行の最大文字数 <input id="maxChars" type="number" min="5" max="120" step="1"></label>
-    <label>最大表示行数（2〜4） <input id="maxLines" type="number" min="2" max="4" step="1"></label>
-    <label>フォントサイズ（px） <input id="fontSize" type="number" min="16" max="120" step="1"></label>
-    <p>幅に合わせて自動改行し、古い行から切り替えます。設定はこのブラウザに保存されます。Sキーで設定を開閉できます。</p>
+    <summary>Caption settings</summary>
+    <label>Maximum characters per line <input id="maxChars" type="number" min="5" max="120" step="1"></label>
+    <label>Maximum visible lines (2–4) <input id="maxLines" type="number" min="2" max="4" step="1"></label>
+    <label>Font size (px) <input id="fontSize" type="number" min="16" max="120" step="1"></label>
+    <p>Text wraps to fit the available width, with older lines replaced as new text arrives. Settings are saved in this browser. Press S to open or close settings.</p>
   </details>
   <div id="lines" aria-live="off"></div>
 

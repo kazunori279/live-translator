@@ -130,15 +130,15 @@ Both windows have to be in the same browser, and it must be Chrome. No OBS or ot
 
 #### Subtitle settings
 
-1. In the caption window, click **字幕設定 / Caption settings** in the top-left, or press **S** while focus is outside an input or button.
+1. In the caption window, click **Caption settings** in the top-left, or press **S** while focus is outside an input or button.
 2. Adjust the values below. After typing a value, click outside the field or press **Tab** to apply it. Translation can keep running while you adjust the display.
 3. Close the settings panel before showing the output to the audience. Move the mouse away and wait 4 seconds for the controls to hide; move the mouse to reveal them again.
 
 | Setting in the UI | Range | Default | Effect |
 | --- | --- | --- | --- |
-| **1行の最大文字数** | 5–120 characters | 32 | Maximum characters in each displayed row. Text wraps earlier when the available width is narrower. |
-| **最大表示行数（2〜4）** | 2–4 lines | 3 | Maximum number of visible rows across all subtitles, including wrapped rows within a long utterance. |
-| **フォントサイズ（px）** | 16–120 px | 32 | Fixed font size; long text does not make the font shrink. |
+| **Maximum characters per line** | 5–120 characters | 32 | Maximum characters in each displayed row. Text wraps earlier when the available width is narrower. |
+| **Maximum visible lines (2–4)** | 2–4 lines | 3 | Maximum number of visible rows across all subtitles, including wrapped rows within a long utterance. |
+| **Font size (px)** | 16–120 px | 32 | Fixed font size; long text does not make the font shrink. |
 
 Changes apply to the current subtitles and are saved for the same browser profile and site. Other caption windows on the same site receive the updated settings too. Settings on the Tokyo and US endpoints are stored separately.
 
@@ -149,7 +149,7 @@ Long utterances wrap automatically at the character or pixel-width limit. As new
 Use this mode when the event has a separate translation area instead of subtitles over the slides:
 
 1. Start translation in the main app, then open **Caption**.
-2. Choose **字幕のみ表示 / Captions only**. This shows subtitles on a black background without asking to capture another window.
+2. Choose **Captions only**. This shows subtitles on a black background without asking to capture another window.
 3. Size the caption window to match the subtitle area's aspect ratio, or move it to the dedicated display and enter fullscreen with **⛶ Fullscreen** or **F**. **Esc** exits fullscreen.
 4. Open **Caption settings** and set the maximum lines to **2**, **3**, or **4**. Start with **32 characters** and **32 px**, then adjust using representative long translations at the actual output size.
 5. Close the settings panel and let the controls hide before the event starts.
